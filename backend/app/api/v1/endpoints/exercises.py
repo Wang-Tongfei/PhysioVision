@@ -18,7 +18,7 @@ def list_exercises(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
-    q = db.query(Exercise)
+    q = db.query(Exercise).filter(Exercise.clinic_id == user.clinic_id)
     if category:
         q = q.filter(Exercise.category == category)
     return q.all()
@@ -30,9 +30,16 @@ def create_exercise(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
-    if db.query(Exercise).filter(Exercise.code == payload.code).first():
+    if (
+        db.query(Exercise)
+        .filter(
+            Exercise.clinic_id == user.clinic_id,
+            Exercise.code == payload.code,
+        )
+        .first()
+    ):
         raise HTTPException(409, "An exercise with this code already exists")
-    obj = Exercise(**payload.model_dump())
+    obj = Exercise(**payload.model_dump(), clinic_id=user.clinic_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -52,6 +59,16 @@ def prescribe(
     )
     if not patient:
         raise HTTPException(404, "Patient not found")
+    exercise = (
+        db.query(Exercise)
+        .filter(
+            Exercise.id == payload.exercise_id,
+            Exercise.clinic_id == user.clinic_id,
+        )
+        .first()
+    )
+    if not exercise:
+        raise HTTPException(404, "Exercise not found")
     obj = ExercisePrescription(**payload.model_dump())
     db.add(obj)
     db.commit()

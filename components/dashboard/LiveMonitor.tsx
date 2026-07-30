@@ -35,7 +35,7 @@ import SkeletonOverlay from "./SkeletonOverlay";
 import { livePatients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { useDataMode } from "@/lib/dataMode";
-import { getSession } from "@/lib/api";
+import { api, getSession } from "@/lib/api";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -73,6 +73,20 @@ interface MonitorStatus {
   error: string | null;
   has_frame: boolean;
   has_result_video: boolean;
+  patient_id: number | null;
+  session_id: number | null;
+  movement_quality_score: number | null;
+  risk_score: number | null;
+  risk_tier: "low" | "moderate" | "high" | null;
+  fatigue_index: number | null;
+  compensation_detected: boolean;
+  coach_message: string | null;
+  coach_severity: "info" | "warning" | "critical";
+  therapist_summary: {
+    needs_review: boolean;
+    summary: string;
+    suggested_plan: string;
+  } | null;
 }
 
 const IDLE_STATUS: MonitorStatus = {
@@ -92,10 +106,23 @@ const IDLE_STATUS: MonitorStatus = {
   error: null,
   has_frame: false,
   has_result_video: false,
+  patient_id: null,
+  session_id: null,
+  movement_quality_score: null,
+  risk_score: null,
+  risk_tier: null,
+  fatigue_index: null,
+  compensation_detected: false,
+  coach_message: null,
+  coach_severity: "info",
+  therapist_summary: null,
 };
 
 async function apiRequest(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_BASE}${path}`, init);
+  const headers = new Headers(init?.headers);
+  const token = getSession()?.access_token;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.detail ?? `Request failed (${response.status})`);
@@ -112,6 +139,8 @@ export default function LiveMonitor() {
   const cameraSocket = useRef<WebSocket | null>(null);
   const captureTimer = useRef<number | null>(null);
   const [exercise, setExercise] = useState("bicep_curl");
+  const [patientId, setPatientId] = useState("");
+  const [patients, setPatients] = useState<Array<{ id: number; full_name: string }>>([]);
   const [status, setStatus] = useState<MonitorStatus>(IDLE_STATUS);
   const [busy, setBusy] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -143,6 +172,15 @@ export default function LiveMonitor() {
     const timer = window.setInterval(refreshStatus, 750);
     return () => window.clearInterval(timer);
   }, [refreshStatus]);
+
+  useEffect(() => {
+    api<Array<{ id: number; full_name: string }>>("/patients")
+      .then((items) => {
+        setPatients(items);
+        setPatientId((current) => current || String(items[0]?.id ?? ""));
+      })
+      .catch(() => setPatients([]));
+  }, []);
 
   const releaseBrowserCamera = useCallback(() => {
     if (captureTimer.current !== null) {
@@ -182,6 +220,7 @@ export default function LiveMonitor() {
       await browserVideo.current.play();
 
       const query = new URLSearchParams({ exercise, track_arm: "right" });
+      if (patientId) query.set("patient_id", patientId);
       const token = getSession()?.access_token;
       if (token) query.set("token", token);
       const socket = new WebSocket(
@@ -254,6 +293,7 @@ export default function LiveMonitor() {
     form.append("video", file);
     form.append("exercise", exercise);
     form.append("track_arm", "right");
+    if (patientId) form.append("patient_id", patientId);
     try {
       const next = await apiRequest("/sessions/monitor/upload", {
         method: "POST",
@@ -363,6 +403,24 @@ export default function LiveMonitor() {
           flexWrap="wrap"
           useFlexGap
         >
+          {patients.length > 0 && (
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <Select
+                value={patientId}
+                onChange={(event) => setPatientId(event.target.value)}
+                disabled={active}
+                displayEmpty
+                aria-label="Patient"
+              >
+                <MenuItem value="" disabled>Select patient</MenuItem>
+                {patients.map((patient) => (
+                  <MenuItem key={patient.id} value={String(patient.id)}>
+                    {patient.full_name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <FormControl size="small" sx={{ minWidth: 135 }}>
             <Select
               value={exercise}
@@ -382,7 +440,7 @@ export default function LiveMonitor() {
             variant="contained"
             startIcon={<Videocam />}
             onClick={openCameraPrompt}
-            disabled={busy || active}
+            disabled={busy || active || (patients.length > 0 && !patientId)}
           >
             Live Camera
           </Button>
@@ -391,7 +449,7 @@ export default function LiveMonitor() {
             variant="outlined"
             startIcon={<UploadFile />}
             onClick={selectUpload}
-            disabled={busy || active}
+            disabled={busy || active || (patients.length > 0 && !patientId)}
           >
             Upload Video
           </Button>
@@ -578,6 +636,28 @@ export default function LiveMonitor() {
       {status.phase === "error" && !cameraErrorDismissed && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {status.error}
+        </Alert>
+      )}
+
+      {status.coach_message && status.phase === "running" && (
+        <Alert severity={status.coach_severity === "critical" ? "error" : status.coach_severity} sx={{ mt: 2 }}>
+          Rehab Coach: {status.coach_message}
+        </Alert>
+      )}
+
+      {["completed", "stopped"].includes(status.phase) && status.movement_quality_score !== null && (
+        <Alert
+          severity={status.risk_tier === "high" ? "error" : status.risk_tier === "moderate" ? "warning" : "success"}
+          sx={{ mt: 2 }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            Session #{status.session_id ?? "preview"} · Quality {status.movement_quality_score}/100 · Risk {status.risk_score}/100 ({status.risk_tier})
+          </Typography>
+          {status.therapist_summary && (
+            <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
+              Therapist Assistant: {status.therapist_summary.summary} {status.therapist_summary.suggested_plan}
+            </Typography>
+          )}
         </Alert>
       )}
 

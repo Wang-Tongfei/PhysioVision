@@ -39,8 +39,8 @@ import {
   FiberManualRecord as LiveIcon,
 } from "@mui/icons-material";
 import { usePersistentState } from "@/lib/usePersistentState";
-import { clearSession, getSession, SessionUser } from "@/lib/api";
-import { DataModeProvider } from "@/lib/dataMode";
+import { api, clearSession, getSession, SessionUser } from "@/lib/api";
+import { DataModeProvider, useDataMode } from "@/lib/dataMode";
 
 const navItems = [
   { text: "Dashboard", icon: <DashboardIcon />, href: "/dashboard" },
@@ -55,6 +55,22 @@ const DRAWER_WIDTH = 250;
 function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; onNavigate?: () => void; user: SessionUser | null }) {
   const pathname = usePathname();
   const theme = useTheme();
+  const { mode } = useDataMode();
+  const [activeSessions, setActiveSessions] = useState(mode === "demo" ? 6 : 0);
+
+  useEffect(() => {
+    if (mode === "demo") {
+      setActiveSessions(6);
+      return;
+    }
+    const load = () =>
+      api<{ active_sessions: number }>("/analytics/clinic/kpi")
+        .then((result) => setActiveSessions(result.active_sessions ?? 0))
+        .catch(() => setActiveSessions(0));
+    load();
+    const timer = window.setInterval(load, 10000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
@@ -100,7 +116,7 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
       >
         <LiveIcon sx={{ color: "#10d97e", fontSize: 12 }} className="pulse-dot" />
         <Typography variant="caption" sx={{ color: "#10d97e", fontWeight: 700 }}>
-          6 PATIENTS LIVE
+          {activeSessions} {activeSessions === 1 ? "PATIENT" : "PATIENTS"} LIVE
         </Typography>
       </Box>
 

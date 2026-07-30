@@ -32,9 +32,10 @@ def start_live_monitor(
     exercise: str = "bicep_curl",
     camera_index: int = 0,
     track_arm: str = "right",
+    patient_id: int | None = None,
 ):
     try:
-        return monitor_engine.start_camera(exercise, camera_index, track_arm)
+        return monitor_engine.start_camera(exercise, camera_index, track_arm, patient_id)
     except (RuntimeError, ValueError) as exc:
         raise _start_error(exc) from exc
 
@@ -44,11 +45,12 @@ async def browser_camera_monitor(
     websocket: WebSocket,
     exercise: str = "bicep_curl",
     track_arm: str = "right",
+    patient_id: int | None = None,
 ):
     await websocket.accept()
     started = False
     try:
-        monitor_engine.start_browser(exercise, track_arm)
+        monitor_engine.start_browser(exercise, track_arm, patient_id)
         started = True
         while True:
             frame = await websocket.receive_bytes()
@@ -68,6 +70,7 @@ async def upload_video(
     video: UploadFile = File(...),
     exercise: str = Form("bicep_curl"),
     track_arm: str = Form("right"),
+    patient_id: int | None = Form(None),
 ):
     if exercise not in SUPPORTED_EXERCISES:
         raise HTTPException(400, f"Unsupported exercise: {exercise}")
@@ -85,7 +88,7 @@ async def upload_video(
                 if total > MAX_UPLOAD_BYTES:
                     raise HTTPException(413, "Video exceeds the 500 MB limit")
                 output.write(chunk)
-        return monitor_engine.start_video(destination, exercise, track_arm)
+        return monitor_engine.start_video(destination, exercise, track_arm, patient_id)
     except HTTPException:
         destination.unlink(missing_ok=True)
         raise

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     PHYSIO_TG_TOKEN: str = ""
     PHYSIO_TG_CHAT: str = ""
 
+    # Microsoft Foundry OpenAI-compatible v1 endpoint. When these values are
+    # absent, SOAP generation uses the deterministic local template.
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_DEPLOYMENT: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

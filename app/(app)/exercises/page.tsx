@@ -160,6 +160,18 @@ export default function ExercisesPage() {
       </Stack>
 
       <Grid container spacing={2.5}>
+        {exercises.length === 0 && (
+          <Grid item xs={12}>
+            <SectionCard title="No exercises yet" subtitle="Clinic exercise library">
+              <Typography color="text.secondary">
+                Create your first clinic exercise to start prescribing rehabilitation plans.
+              </Typography>
+              <Button variant="contained" startIcon={<Add />} onClick={() => setNewOpen(true)} sx={{ mt: 2 }}>
+                Create first exercise
+              </Button>
+            </SectionCard>
+          </Grid>
+        )}
         {exercises.map((exercise) => (
           <Grid item xs={12} sm={6} lg={4} key={exercise.id}>
             <SectionCard

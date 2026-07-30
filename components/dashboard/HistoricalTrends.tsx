@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Box, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
 import EChart from "@/components/charts/EChart";
 import SectionCard from "@/components/common/SectionCard";
@@ -7,15 +8,45 @@ import { ShowChart, BarChart } from "@mui/icons-material";
 import { lineOption, barOption } from "@/components/charts/chartOptions";
 import { recoveryTrend, clinicAnalytics } from "@/lib/mockData";
 import { useDataMode } from "@/lib/dataMode";
+import { api } from "@/lib/api";
 
 export default function HistoricalTrends() {
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
   const { mode } = useDataMode();
+  const [liveTrend, setLiveTrend] = useState<{
+    dates: string[];
+    quality: number[];
+    rom: number[];
+    risk: number[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "live") return;
+    api<{ dates: string[]; quality: number[]; rom: number[]; risk: number[] }>(
+      "/analytics/clinic/trend"
+    ).then(setLiveTrend).catch(() => setLiveTrend(null));
+  }, [mode]);
+
   if (mode === "live") {
     return (
       <SectionCard title="Recovery Trends" subtitle="Database sessions" icon={<ShowChart />}>
-        <Typography color="text.secondary">Recovery charts will appear after real rehabilitation sessions have been recorded. Demo trends are hidden in Real data mode.</Typography>
+        {liveTrend?.dates.length ? (
+          <EChart
+            height={isSm ? 220 : 260}
+            option={lineOption(
+              liveTrend.dates,
+              [
+                { name: "ROM (°)", data: liveTrend.rom, color: "#22d3ee" },
+                { name: "Quality", data: liveTrend.quality, color: "#f5b73b" },
+                { name: "Risk", data: liveTrend.risk, color: "#ef5b5b" },
+              ],
+              { area: true }
+            )}
+          />
+        ) : (
+          <Typography color="text.secondary">Complete a monitored patient session to create the first real recovery trend.</Typography>
+        )}
       </SectionCard>
     );
   }

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.patient import Patient
+from app.models.patient import Patient, RiskTier
 from app.models.report import Report
 from app.models.session import RehabSession
 from app.schemas.patient import PatientCreate, PatientOut
@@ -34,7 +34,12 @@ def create_patient(
     )
     if duplicate:
         raise HTTPException(409, "This MRN already exists")
-    obj = Patient(**payload.model_dump(), clinic_id=user.clinic_id)
+    values = payload.model_dump()
+    try:
+        values["risk_tier"] = RiskTier(values["risk_tier"].lower())
+    except ValueError as exc:
+        raise HTTPException(422, "Risk tier must be low, moderate, high, or critical") from exc
+    obj = Patient(**values, clinic_id=user.clinic_id)
     db.add(obj)
     db.commit()
     db.refresh(obj)

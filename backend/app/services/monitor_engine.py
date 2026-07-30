@@ -12,10 +12,14 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
 from app.core.config import settings
+from app.agents.coach_agent import coach
+from app.agents.risk_agent import assess
+from app.agents.therapist_agent import summarize
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +29,12 @@ UPLOAD_ROOT = DATA_ROOT / "uploads"
 OUTPUT_ROOT = DATA_ROOT / "processed"
 
 SUPPORTED_EXERCISES = {"bicep_curl", "squat", "plank", "pushup"}
+ROM_TARGETS = {
+    "bicep_curl": 70.0,
+    "squat": 80.0,
+    "pushup": 70.0,
+    "plank": 160.0,
+}
 
 
 class BrowserFrameSource:
@@ -132,6 +142,16 @@ class MonitorEngine:
             "has_frame": False,
             "has_result_video": False,
             "telegram_enabled": False,
+            "patient_id": None,
+            "session_id": None,
+            "movement_quality_score": None,
+            "risk_score": None,
+            "risk_tier": None,
+            "fatigue_index": None,
+            "compensation_detected": False,
+            "coach_message": None,
+            "coach_severity": "info",
+            "therapist_summary": None,
         }
 
     def status(self) -> dict:
@@ -144,27 +164,36 @@ class MonitorEngine:
         return path if path and path.is_file() else None
 
     def start_camera(
-        self, exercise: str, camera_index: int = 0, track_arm: str = "right"
+        self,
+        exercise: str,
+        camera_index: int = 0,
+        track_arm: str = "right",
+        patient_id: int | None = None,
     ) -> dict:
         return self._start(
             source=camera_index,
             source_kind="camera",
             exercise=exercise,
             track_arm=track_arm,
+            patient_id=patient_id,
         )
 
     def start_video(
-        self, path: Path, exercise: str, track_arm: str = "right"
+        self,
+        path: Path,
+        exercise: str,
+        track_arm: str = "right",
+        patient_id: int | None = None,
     ) -> dict:
-        return self._start(
-            source=str(path),
-            source_kind="upload",
-            exercise=exercise,
-            track_arm=track_arm,
-        )
+        return self._start(str(path), "upload", exercise, track_arm, patient_id)
 
-    def start_browser(self, exercise: str, track_arm: str = "right") -> dict:
-        return self._start(None, "browser", exercise, track_arm)
+    def start_browser(
+        self,
+        exercise: str,
+        track_arm: str = "right",
+        patient_id: int | None = None,
+    ) -> dict:
+        return self._start(None, "browser", exercise, track_arm, patient_id)
 
     def push_browser_frame(self, jpeg: bytes) -> None:
         with self._lock:
@@ -178,6 +207,7 @@ class MonitorEngine:
         source_kind: str,
         exercise: str,
         track_arm: str,
+        patient_id: int | None = None,
     ) -> dict:
         if exercise not in SUPPORTED_EXERCISES:
             raise ValueError(f"Unsupported exercise: {exercise}")
@@ -199,11 +229,12 @@ class MonitorEngine:
                     "phase": "starting",
                     "source": source_kind,
                     "exercise": exercise,
+                    "patient_id": patient_id,
                 }
             )
             self._thread = threading.Thread(
                 target=self._run,
-                args=(source, source_kind, exercise, track_arm),
+                args=(source, source_kind, exercise, track_arm, patient_id),
                 daemon=True,
                 name="physiovision-monitor",
             )
@@ -247,6 +278,7 @@ class MonitorEngine:
         source_kind: str,
         exercise: str,
         track_arm: str,
+        patient_id: int | None,
     ) -> None:
         source = pose = hand_pose = writer = None
         try:
@@ -314,6 +346,12 @@ class MonitorEngine:
             last_alert_by_fault: dict[str, float] = {}
             notified_complete = False
             frame_interval = 1.0 / max(1.0, source.fps)
+            started_at = datetime.now(timezone.utc)
+            analyzed_frames = 0
+            good_frames = 0
+            fault_frames = 0
+            metric_values: list[float] = []
+            faults: set[str] = set()
 
             while not self._stop_event.is_set():
                 loop_started = time.monotonic()
@@ -327,11 +365,17 @@ class MonitorEngine:
                 hand_landmarks = hand_pose.estimate(frame) if hand_pose else []
                 if landmarks is not None and not analyzer.is_complete:
                     result = analyzer.update(landmarks)
+                    analyzed_frames += 1
                     metric_label = result.metric_label
                     metric_value = result.metric_value
                     form_ok = result.form_ok
                     form_status = result.status
+                    good_frames += int(result.form_ok)
+                    fault_frames += int(not result.form_ok)
+                    if result.metric_value is not None:
+                        metric_values.append(float(result.metric_value))
                     if result.fault:
+                        faults.add(result.fault)
                         fault_time = time.time()
                         last_fault_time = fault_time
                         previous_alert = last_alert_by_fault.get(
@@ -398,6 +442,8 @@ class MonitorEngine:
                                 ),
                                 "complete": bool(analyzer.is_complete),
                                 "has_frame": True,
+                                "coach_message": form_status,
+                                "coach_severity": "info" if form_ok else "warning",
                             }
                         )
                         self._frame_ready.notify_all()
@@ -410,10 +456,68 @@ class MonitorEngine:
                 writer.release()
                 writer = None
             stopped = self._stop_event.is_set()
+            completion = min(
+                1.0,
+                float(analyzer.progress) / max(1.0, float(analyzer.target)),
+            )
+            form_ratio = good_frames / max(1, analyzed_frames)
+            quality = round(100 * (0.7 * form_ratio + 0.3 * completion), 1)
+            compensation = bool(faults)
+            fatigue = round(
+                min(100.0, 100.0 * fault_frames / max(1, analyzed_frames)),
+                1,
+            )
+            if exercise == "plank" and metric_values:
+                rom_achieved = round(sum(metric_values) / len(metric_values), 1)
+            else:
+                rom_achieved = (
+                    round(max(metric_values) - min(metric_values), 1)
+                    if len(metric_values) > 1
+                    else round(metric_values[0], 1) if metric_values else 0.0
+                )
+            base_risk = self._patient_base_risk(patient_id)
+            telemetry = {
+                "movement_quality_score": quality,
+                "rom_achieved_deg": rom_achieved,
+                "rom_target_deg": ROM_TARGETS[exercise],
+                "total_reps": int(analyzer.progress),
+                "fatigue_index": fatigue,
+                "compensation_detected": compensation,
+            }
+            risk = assess(telemetry, base_risk=base_risk)
+            coaching = coach(telemetry, risk_tier=risk["tier"])
+            therapist = summarize(
+                telemetry,
+                baseline_quality=self._patient_baseline(patient_id),
+                risk=risk,
+            )
+            session_id = self._persist_summary(
+                patient_id=patient_id,
+                exercise=exercise,
+                source_kind=source_kind,
+                stopped=stopped,
+                started_at=started_at,
+                telemetry=telemetry,
+                risk=risk,
+                therapist=therapist,
+            )
             with self._frame_ready:
                 self._status["phase"] = "stopped" if stopped else "completed"
                 self._status["complete"] = bool(analyzer.is_complete)
                 self._status["has_result_video"] = self._result_path is not None
+                self._status.update(
+                    {
+                        "session_id": session_id,
+                        "movement_quality_score": quality,
+                        "risk_score": risk["risk_score"],
+                        "risk_tier": risk["tier"],
+                        "fatigue_index": fatigue,
+                        "compensation_detected": compensation,
+                        "coach_message": coaching["message"],
+                        "coach_severity": coaching["severity"],
+                        "therapist_summary": therapist,
+                    }
+                )
                 self._frame_ready.notify_all()
         except Exception as exc:
             with self._frame_ready:
@@ -434,6 +538,90 @@ class MonitorEngine:
                 Path(str(source_value)).unlink(missing_ok=True)
             with self._lock:
                 self._browser_source = None
+
+    @staticmethod
+    def _patient_base_risk(patient_id: int | None) -> float:
+        if patient_id is None:
+            return 20.0
+        from app.core.database import SessionLocal
+        from app.models.patient import Patient
+
+        with SessionLocal() as db:
+            patient = db.get(Patient, patient_id)
+            tier = getattr(patient.risk_tier, "value", patient.risk_tier) if patient else "moderate"
+        return {"low": 10.0, "moderate": 35.0, "high": 65.0, "critical": 90.0}.get(
+            str(tier), 35.0
+        )
+
+    @staticmethod
+    def _patient_baseline(patient_id: int | None) -> float:
+        if patient_id is None:
+            return 80.0
+        from sqlalchemy import func
+        from app.core.database import SessionLocal
+        from app.models.session import RehabSession
+
+        with SessionLocal() as db:
+            value = (
+                db.query(func.avg(RehabSession.movement_quality_score))
+                .filter(RehabSession.patient_id == patient_id)
+                .scalar()
+            )
+        return round(float(value or 80.0), 1)
+
+    @staticmethod
+    def _persist_summary(
+        *,
+        patient_id: int | None,
+        exercise: str,
+        source_kind: str,
+        stopped: bool,
+        started_at: datetime,
+        telemetry: dict,
+        risk: dict,
+        therapist: dict,
+    ) -> int | None:
+        if patient_id is None:
+            return None
+        from app.core.database import SessionLocal
+        from app.models.alert import Alert
+        from app.models.patient import Patient
+        from app.models.session import RehabSession, SessionStatus
+
+        with SessionLocal() as db:
+            if db.get(Patient, patient_id) is None:
+                return None
+            row = RehabSession(
+                patient_id=patient_id,
+                edge_node_id="local-monitor",
+                camera_id=source_kind,
+                status=SessionStatus.ABORTED if stopped else SessionStatus.COMPLETED,
+                started_at=started_at,
+                ended_at=datetime.now(timezone.utc),
+                movement_quality_score=telemetry["movement_quality_score"],
+                risk_score=risk["risk_score"],
+                fatigue_index=telemetry["fatigue_index"],
+                compensation_detected=telemetry["compensation_detected"],
+                total_reps=telemetry["total_reps"],
+                rom_achieved_deg=telemetry["rom_achieved_deg"],
+                rom_target_deg=telemetry["rom_target_deg"],
+                evidence_clip_url=f"exercise:{exercise}",
+            )
+            db.add(row)
+            db.flush()
+            if risk["tier"] != "low" or telemetry["compensation_detected"]:
+                db.add(
+                    Alert(
+                        session_id=row.id,
+                        patient_id=patient_id,
+                        severity="critical" if risk["tier"] == "high" else "warning",
+                        type="compensation" if telemetry["compensation_detected"] else "risk",
+                        message=therapist["summary"],
+                        score=risk["risk_score"],
+                    )
+                )
+            db.commit()
+            return row.id
 
 
 monitor_engine = MonitorEngine()

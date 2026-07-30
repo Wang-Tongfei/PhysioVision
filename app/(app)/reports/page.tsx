@@ -9,7 +9,7 @@ import {
 import { AutoAwesome, Download, NoteAdd, SyncProblem, VerifiedUser, Warning } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import GaugeRing from "@/components/common/GaugeRing";
-import { aiRecommendation, alerts, patients, reports as seedReports } from "@/lib/mockData";
+import { aiRecommendation, alerts as mockAlerts, patients, reports as seedReports } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { api } from "@/lib/api";
 import { useDataMode } from "@/lib/dataMode";
@@ -53,6 +53,25 @@ interface ApiReport {
   created_at?: string;
 }
 
+interface DisplayAlert {
+  id: number;
+  patient: string;
+  severity: "critical" | "warning" | "info";
+  type: string;
+  msg: string;
+}
+
+interface TherapistDecision {
+  available: boolean;
+  session_id?: number;
+  patient_name?: string;
+  movement_quality_score?: number;
+  risk_score?: number;
+  summary?: string;
+  suggested_plan?: string;
+  needs_review?: boolean;
+}
+
 const localDateTime = () => {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
@@ -85,6 +104,8 @@ export default function ReportsPage() {
   const [demoReports, setDemoReports] = usePersistentState<SoapReport[]>("physiovision.reports", initialReports);
   const [liveReports, setLiveReports] = useState<SoapReport[]>([]);
   const [patientChoices, setPatientChoices] = useState(patients);
+  const [liveAlerts, setLiveAlerts] = useState<DisplayAlert[]>([]);
+  const [assistant, setAssistant] = useState<TherapistDecision | null>(null);
   const { mode } = useDataMode();
   const reports = mode === "demo" ? demoReports : liveReports;
   const updateReports = (updater: (current: SoapReport[]) => SoapReport[]) => {
@@ -106,8 +127,16 @@ export default function ReportsPage() {
     Promise.all([
       api<Array<{ id: number; full_name: string; mrn: string; risk_tier: string }>>("/patients"),
       api<ApiReport[]>("/reports"),
+      api<Array<{
+        id: number;
+        patient_id?: number;
+        severity: "critical" | "warning" | "info";
+        type?: string;
+        message: string;
+      }>>("/alerts?unack=true"),
+      api<TherapistDecision>("/analytics/clinic/assistant"),
     ])
-      .then(([patientRows, reportRows]) => {
+      .then(([patientRows, reportRows, alertRows, assistantRow]) => {
         const choices = patientRows.map((patient) => ({
           id: patient.id,
           name: patient.full_name,
@@ -122,6 +151,14 @@ export default function ReportsPage() {
         }));
         setPatientChoices(choices);
         const names = new Map(choices.map((patient) => [patient.id, patient.name]));
+        setLiveAlerts(alertRows.map((alert) => ({
+          id: alert.id,
+          patient: names.get(alert.patient_id ?? -1) || "Patient",
+          severity: alert.severity,
+          type: alert.type || "Risk",
+          msg: alert.message,
+        })));
+        setAssistant(assistantRow);
         setLiveReports(reportRows.map((report) => ({
           id: report.id,
           patient: names.get(report.patient_id) || `Patient ${report.patient_id}`,
@@ -298,6 +335,11 @@ export default function ReportsPage() {
         <Grid item xs={12} lg={8}>
           <SectionCard title="Generated Reports" subtitle={`${reports.length} SOAP Agent + therapist entries`}>
             <Stack spacing={1.5}>
+              {reports.length === 0 && (
+                <Typography color="text.secondary">
+                  No reports yet. Complete a patient session or create the first SOAP note.
+                </Typography>
+              )}
               {reports.map((report) => (
                 <Box key={report.id} className="glass-card-compact" sx={{ p: 1.5 }}>
                   <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={1}>
@@ -345,15 +387,38 @@ export default function ReportsPage() {
         <Grid item xs={12} lg={4}>
           <Stack spacing={2.5}>
             <SectionCard title="Therapist Assistant" subtitle="Decision summary">
-              <Stack direction="row" justifyContent="space-around" sx={{ mb: 1 }}>
-                <GaugeRing value={aiRecommendation.riskScore} size={96} thickness={8} label="Risk" color="#f5b73b" />
-                <GaugeRing value={aiRecommendation.movementScore} size={96} thickness={8} label="Quality" color="#22d3ee" />
-              </Stack>
-              <Typography variant="body2" sx={{ color: "text.secondary" }}>{aiRecommendation.recommendation}</Typography>
+              {mode === "demo" ? (
+                <>
+                  <Stack direction="row" justifyContent="space-around" sx={{ mb: 1 }}>
+                    <GaugeRing value={aiRecommendation.riskScore} size={96} thickness={8} label="Risk" color="#f5b73b" />
+                    <GaugeRing value={aiRecommendation.movementScore} size={96} thickness={8} label="Quality" color="#22d3ee" />
+                  </Stack>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>{aiRecommendation.recommendation}</Typography>
+                </>
+              ) : assistant?.available ? (
+                <>
+                  <Stack direction="row" justifyContent="space-around" sx={{ mb: 1 }}>
+                    <GaugeRing value={assistant.risk_score ?? 0} size={96} thickness={8} label="Risk" color={(assistant.risk_score ?? 0) >= 66 ? "#ef5b5b" : "#f5b73b"} />
+                    <GaugeRing value={assistant.movement_quality_score ?? 0} size={96} thickness={8} label="Quality" color="#22d3ee" />
+                  </Stack>
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>{assistant.patient_name}</Typography>
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>{assistant.summary}</Typography>
+                  <Typography variant="body2" sx={{ color: "#22d3ee", mt: 1 }}>{assistant.suggested_plan}</Typography>
+                </>
+              ) : (
+                <Typography color="text.secondary">
+                  No clinical recommendation yet. Complete a patient session to generate a decision summary.
+                </Typography>
+              )}
             </SectionCard>
             <SectionCard title="Active Alerts" subtitle="Risk Agent outputs">
               <Stack spacing={1}>
-                {alerts.map((alert) => (
+                {(mode === "demo" ? mockAlerts : liveAlerts).length === 0 && (
+                  <Typography color="text.secondary">
+                    No active alerts. Warnings will appear after risk or compensation is detected.
+                  </Typography>
+                )}
+                {(mode === "demo" ? mockAlerts : liveAlerts).map((alert) => (
                   <Box key={alert.id} className="glass-card-compact" sx={{ p: 1.2, borderLeft: `3px solid ${severityColor[alert.severity]}` }}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       {alert.severity === "critical" ? <Warning sx={{ color: severityColor[alert.severity], fontSize: 16 }} /> : <SyncProblem sx={{ color: severityColor[alert.severity], fontSize: 16 }} />}

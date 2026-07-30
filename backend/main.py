@@ -11,8 +11,10 @@ from contextlib import asynccontextmanager
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
-from app.models import Clinic, Subscription, User  # Imports all models into metadata.
+from app.models import Clinic, Patient, Subscription, User  # Imports all models into metadata.
+from app.models.patient import RiskTier
 from app.core.security import hash_password
+from sqlalchemy import inspect, text
 
 
 @asynccontextmanager
@@ -20,6 +22,12 @@ async def lifespan(app: FastAPI):
     # Keep local/demo startup self-contained. Production deployments should
     # replace this with versioned Alembic migrations.
     Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "sqlite":
+        columns = {column["name"] for column in inspect(engine).get_columns("exercises")}
+        if "clinic_id" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE exercises ADD COLUMN clinic_id INTEGER"))
+                connection.execute(text("UPDATE exercises SET clinic_id = 1 WHERE clinic_id IS NULL"))
     with SessionLocal() as db:
         clinic = db.get(Clinic, 1)
         if clinic is None:
@@ -53,6 +61,16 @@ async def lifespan(app: FastAPI):
                     email="therapist@clinic.com",
                     password_hash=hash_password("demo1234"),
                     role="lead_therapist",
+                )
+            )
+        if db.query(Patient).filter(Patient.clinic_id == 1).first() is None:
+            db.add(
+                Patient(
+                    clinic_id=1,
+                    mrn="DEMO-001",
+                    full_name="Demo Patient",
+                    diagnosis="Post-operative knee rehabilitation",
+                    risk_tier=RiskTier.MODERATE,
                 )
             )
         db.commit()

@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [kpi, setKpi] = useState({
     active_patients: 48,
     sessions_today: 6,
+    active_sessions: 6,
     avg_quality: 92,
     alert_rate: 0.03,
   });
@@ -51,11 +52,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (mode === "demo") {
-      setKpi({ active_patients: 48, sessions_today: 6, avg_quality: 92, alert_rate: 0.03 });
+      setKpi({ active_patients: 48, sessions_today: 6, active_sessions: 6, avg_quality: 92, alert_rate: 0.03 });
       return;
     }
-    api<typeof kpi>("/analytics/clinic/kpi").then(setKpi).catch(() => {
-      setKpi({ active_patients: 0, sessions_today: 0, avg_quality: 0, alert_rate: 0 });
+    api<typeof kpi>("/analytics/clinic/kpi").then((result) => setKpi({
+      ...result,
+      active_sessions: result.active_sessions ?? 0,
+    })).catch(() => {
+      setKpi({ active_patients: 0, sessions_today: 0, active_sessions: 0, avg_quality: 0, alert_rate: 0 });
     });
   }, [mode]);
 
@@ -80,7 +84,7 @@ export default function DashboardPage() {
         <Stack direction="row" spacing={1}>
           <Chip
             icon={<FiberManualRecord sx={{ fontSize: 12, color: "#10d97e !important" }} />}
-            label={mode === "demo" ? "6 patients live" : "Real database"}
+            label={`${kpi.active_sessions} ${kpi.active_sessions === 1 ? "patient" : "patients"} live`}
             sx={{ background: "rgba(16,217,126,0.1)", border: "1px solid rgba(16,217,126,0.3)", color: "#10d97e", fontWeight: 700 }}
           />
           <Chip
@@ -107,7 +111,7 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
             title="Live Sessions"
-            value={String(kpi.sessions_today)}
+            value={String(kpi.active_sessions)}
             delta="+2"
             trend="up"
             icon={<MonitorHeart sx={{ fontSize: 28 }} />}

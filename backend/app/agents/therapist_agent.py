@@ -20,15 +20,31 @@ INTERACTION
 from typing import Dict, Any
 
 
-def summarize(telemetry: Dict[str, Any], baseline_quality: float = 80.0) -> Dict[str, Any]:
+def summarize(
+    telemetry: Dict[str, Any],
+    baseline_quality: float = 80.0,
+    risk: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     quality = telemetry.get("movement_quality_score", 0)
-    needs_review = quality < 0.7 * baseline_quality
+    risk = risk or {"risk_score": 0, "tier": "low"}
+    needs_review = quality < 0.7 * baseline_quality or risk["tier"] == "high"
+    delta = round(quality - baseline_quality, 1)
+    suggested_plan = (
+        "Pause progression and review safety before the next session."
+        if needs_review
+        else "Maintain the current prescription."
+        if delta < 5
+        else "Consider gradual progression after therapist review."
+    )
     return {
         "agent": "therapist_assistant",
         "needs_review": needs_review,
-        "suggested_plan": (
-            "Maintain current prescription"
-            if quality >= baseline_quality
-            else "Reduce reps by 2, add form-focus cues"
+        "summary": (
+            f"Session quality {quality:.1f}/100 ({delta:+.1f} vs baseline); "
+            f"risk {risk['tier']} at {risk['risk_score']:.1f}/100."
         ),
+        "baseline_quality": baseline_quality,
+        "quality_delta": delta,
+        "risk_factors": ["compensation"] if telemetry.get("compensation_detected") else [],
+        "suggested_plan": suggested_plan,
     }

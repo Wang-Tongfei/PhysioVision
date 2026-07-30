@@ -1,6 +1,7 @@
 """Exercise library and prescription models."""
 from sqlalchemy import (
     Column, Integer, String, Text, Float, Boolean, ForeignKey, DateTime,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -10,9 +11,13 @@ from app.core.database import Base
 
 class Exercise(Base):
     __tablename__ = "exercises"
+    __table_args__ = (
+        UniqueConstraint("clinic_id", "code", name="uq_exercise_clinic_code"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(64), unique=True, index=True)  # e.g. SHOULDER_FLEX_90
+    clinic_id = Column(Integer, ForeignKey("clinics.id"), nullable=False, index=True)
+    code = Column(String(64), index=True)  # e.g. SHOULDER_FLEX_90
     name = Column(String(128), nullable=False)
     category = Column(String(64))  # mobility / strength / balance / gait
     target_body_part = Column(String(64))

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Box, Typography, Stack, Chip, LinearProgress } from "@mui/material";
 import GaugeRing from "@/components/common/GaugeRing";
 import SectionCard from "@/components/common/SectionCard";
 import { Shield, Speed, BatteryAlert, SyncProblem, AutoAwesome } from "@mui/icons-material";
 import { aiRecommendation } from "@/lib/mockData";
 import { useDataMode } from "@/lib/dataMode";
+import { API_BASE } from "@/lib/api";
 
 function MetricRow({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   const num = parseInt(value);
@@ -50,7 +52,49 @@ function MetricRow({ icon, label, value, color }: { icon: React.ReactNode; label
 
 export default function RightPanel() {
   const { mode } = useDataMode();
+  const [live, setLive] = useState<{
+    phase: string;
+    risk_score: number | null;
+    risk_tier: string | null;
+    movement_quality_score: number | null;
+    fatigue_index: number | null;
+    compensation_detected: boolean;
+    therapist_summary: { summary: string; suggested_plan: string } | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "live") return;
+    const load = () => fetch(`${API_BASE}/sessions/monitor/status`)
+      .then((response) => response.json())
+      .then(setLive)
+      .catch(() => setLive(null));
+    load();
+    const timer = window.setInterval(load, 1000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
+
   if (mode === "live") {
+    if (live?.risk_score !== null && live?.risk_score !== undefined) {
+      const color = live.risk_score < 33 ? "#10d97e" : live.risk_score < 66 ? "#f5b73b" : "#ef5b5b";
+      return (
+        <Stack spacing={2.5}>
+          <SectionCard title="Risk Assessment" subtitle="Explainable session score" icon={<Shield />}>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+              <GaugeRing value={live.risk_score} size={128} thickness={11} label="Risk Level" caption={live.risk_tier ?? "Unknown"} color={color} icon={<Shield />} />
+            </Box>
+            <MetricRow icon={<Speed />} label="Movement Score" value={`${live.movement_quality_score ?? 0}%`} color="#22d3ee" />
+            <Box sx={{ height: 12 }} />
+            <MetricRow icon={<BatteryAlert />} label="Fatigue" value={`${live.fatigue_index ?? 0}%`} color="#f5b73b" />
+          </SectionCard>
+          {live.therapist_summary && (
+            <SectionCard title="Therapist Assistant" subtitle="Rule-based decision support" icon={<AutoAwesome />}>
+              <Typography variant="body2" color="text.secondary">{live.therapist_summary.summary}</Typography>
+              <Typography variant="body2" sx={{ mt: 1, color: "#22d3ee" }}>{live.therapist_summary.suggested_plan}</Typography>
+            </SectionCard>
+          )}
+        </Stack>
+      );
+    }
     return (
       <SectionCard title="Risk Assessment" subtitle="Real AI evaluation" icon={<Shield />}>
         <Typography color="text.secondary">Complete a monitored session to generate a real risk assessment and recommendation. Demo recommendations are hidden in Real data mode.</Typography>
