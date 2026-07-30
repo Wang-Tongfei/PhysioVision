@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
+    # Optional Telegram delivery for monitoring alerts and completion notices.
+    PHYSIO_TG_TOKEN: str = ""
+    PHYSIO_TG_CHAT: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -123,6 +123,20 @@ python main.py
 摄像头，不是浏览器所在设备的摄像头。上传上限为 500 MB；上传原文件会
 在分析结束后删除，当前处理结果会保留到下一项任务开始。
 
+### Telegram 通知
+
+在 `backend/.env` 中配置以下变量后，网页摄像头和上传视频分析会启用
+Telegram：
+
+```env
+PHYSIO_TG_TOKEN=your-bot-token
+PHYSIO_TG_CHAT=your-chat-id
+```
+
+启用后会发送训练开始通知、错误动作录像和训练完成摘要。相同错误类型有
+15 秒冷却时间，避免连续刷屏。未配置时通知功能静默关闭，不影响分析。
+修改配置后需要重启 FastAPI。
+
 ### 本地动作监测
 
 具体环境配置和快捷键见 `Physio_AI_Bot/README.md`。

@@ -66,7 +66,8 @@ Only one monitoring job can run at a time. Uploads are limited to 500 MB.
   "form_ok": true,
   "metric_label": "Knee",
   "metric_value": 103.2,
-  "has_frame": true
+  "has_frame": true,
+  "telegram_enabled": true
 }
 ```
 

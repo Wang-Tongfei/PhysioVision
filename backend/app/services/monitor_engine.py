@@ -14,6 +14,8 @@ import uuid
 from pathlib import Path
 from typing import Iterator
 
+from app.core.config import settings
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BOT_ROOT = PROJECT_ROOT / "Physio_AI_Bot"
@@ -40,6 +42,9 @@ def _load_bot_modules():
                 "exercise_analysis"
             ).create_analyzer,
             "ClipRecorder": importlib.import_module("clip_recorder").ClipRecorder,
+            "TelegramNotifier": importlib.import_module(
+                "notifier"
+            ).TelegramNotifier,
             "hud": importlib.import_module("hud"),
         }
     except (ImportError, AttributeError) as exc:
@@ -80,6 +85,7 @@ class MonitorEngine:
             "error": None,
             "has_frame": False,
             "has_result_video": False,
+            "telegram_enabled": False,
         }
 
     def status(self) -> dict:
@@ -198,6 +204,10 @@ class MonitorEngine:
             recorder = modules["ClipRecorder"](
                 cfg.clips_dir, source.fps, cfg.clip_buffer_seconds
             )
+            notifier = modules["TelegramNotifier"](
+                settings.PHYSIO_TG_TOKEN or cfg.telegram_token,
+                settings.PHYSIO_TG_CHAT or cfg.telegram_chat_id,
+            )
 
             if source_kind == "upload":
                 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
@@ -220,14 +230,21 @@ class MonitorEngine:
                         "source_label": source.label,
                         "target": float(analyzer.target),
                         "unit": analyzer.unit,
+                        "telegram_enabled": notifier.enabled,
                     }
                 )
+            notifier.send_message(
+                f"PhysioVision: {analyzer.name} session started "
+                f"({source.label})."
+            )
 
             form_status = "Step into view of the camera"
             form_ok = True
             metric_label = ""
             metric_value = None
             last_fault_time = 0.0
+            last_alert_by_fault: dict[str, float] = {}
+            notified_complete = False
             frame_interval = 1.0 / max(1.0, source.fps)
 
             while not self._stop_event.is_set():
@@ -247,13 +264,34 @@ class MonitorEngine:
                     form_ok = result.form_ok
                     form_status = result.status
                     if result.fault:
-                        recorder.save(result.fault)
-                        last_fault_time = time.time()
+                        fault_time = time.time()
+                        last_fault_time = fault_time
+                        previous_alert = last_alert_by_fault.get(
+                            result.fault, 0.0
+                        )
+                        if fault_time - previous_alert >= 15.0:
+                            clip_path = recorder.save(result.fault)
+                            if clip_path:
+                                notifier.send_video(
+                                    clip_path,
+                                    caption=(
+                                        f"PhysioVision alert: {analyzer.name} - "
+                                        f"{result.status}. Please review."
+                                    ),
+                                )
+                                last_alert_by_fault[result.fault] = fault_time
                 elif landmarks is None and not analyzer.is_complete:
                     form_status = "Step into view of the camera"
                     form_ok = True
 
                 recorder.add(frame)
+                if analyzer.is_complete and not notified_complete:
+                    notifier.send_message(
+                        f"PhysioVision workout complete: {analyzer.name} "
+                        f"{analyzer.progress:.1f}/{analyzer.target:g} "
+                        f"{analyzer.unit}."
+                    )
+                    notified_complete = True
                 state = modules["hud"].HudState(
                     exercise=analyzer.name,
                     progress=analyzer.progress,
@@ -314,6 +352,8 @@ class MonitorEngine:
                 self._status.update({"phase": "error", "error": str(exc)})
                 self._frame_ready.notify_all()
         finally:
+            if "notifier" in locals():
+                notifier.flush(timeout=15)
             if writer is not None:
                 writer.release()
             if source is not None:

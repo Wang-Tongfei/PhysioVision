@@ -54,6 +54,7 @@ class MonitorUploadTest(unittest.TestCase):
             self.assertEqual(status["phase"], "completed", status)
             self.assertTrue(status["has_frame"])
             self.assertTrue(status["has_result_video"])
+            self.assertFalse(status["telegram_enabled"])
 
             result = client.get("/api/v1/sessions/monitor/result")
             self.assertEqual(result.status_code, 200, result.text)
