@@ -78,11 +78,21 @@ const testimonials = [
   },
 ];
 
+const LANDING_PAGE_SCALE = 1.1;
+
 export default function LandingPage() {
   const theme = useTheme();
 
   return (
-    <Box sx={{ position: "relative", overflow: "hidden" }}>
+    <Box
+      sx={{
+        position: "relative",
+        overflow: "hidden",
+        width: `calc(100% / ${LANDING_PAGE_SCALE})`,
+        mx: "auto",
+        zoom: LANDING_PAGE_SCALE,
+      }}
+    >
       {/* Glow blobs */}
       <Box
         className="glow-blob"
