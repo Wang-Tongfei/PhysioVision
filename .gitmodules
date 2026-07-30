@@ -1,0 +1,4 @@
+[submodule "Physio_AI_Bot"]
+	path = Physio_AI_Bot
+	url = https://github.com/Gereth14/Physio_AI_Bot.git
+	branch = full-body-rehab-tracking

@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+
+# next.js build
+.next/
+out/
+*.tsbuildinfo
+
+# env
+.env.local
+.env
+*.local
+
+# logs
+*.log
+install*.log
+install.err
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+clips/
+*.mp4
+*.avi
+
+# Local diagnostics and exported pages
+_test_*.html
+_t_*.html
+tsc_out.txt
+project_tree.txt
+.checkpoint/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
