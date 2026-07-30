@@ -7,9 +7,24 @@ import SectionCard from "@/components/common/SectionCard";
 export default function SettingsPage() {
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
-      <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em", mb: 3 }}>
-        Settings & Clinic Management
-      </Typography>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        justifyContent="space-between"
+        alignItems={{ xs: "stretch", sm: "center" }}
+        spacing={2}
+        mb={3}
+      >
+        <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
+          Settings & Clinic Management
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<Save />}
+          sx={{ alignSelf: { xs: "stretch", sm: "center" }, flexShrink: 0 }}
+        >
+          Save Changes
+        </Button>
+      </Stack>
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} lg={6}>
@@ -44,6 +59,14 @@ export default function SettingsPage() {
                 <TextField size="small" label="FHIR Endpoint" defaultValue="https://fhir.orchardhealth.sg" sx={fieldSx} />
               </Stack>
             </SectionCard>
+
+            <SectionCard title="Edge Fleet" subtitle="Raspberry Pi nodes">
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {["pi-cam-01", "pi-cam-02", "pi-cam-03", "pi-cam-04"].map((n) => (
+                  <Chip key={n} label={`${n} · online`} size="small" sx={{ bgcolor: "rgba(16,217,126,0.12)", color: "#10d97e" }} />
+                ))}
+              </Stack>
+            </SectionCard>
           </Stack>
         </Grid>
 
@@ -66,20 +89,10 @@ export default function SettingsPage() {
               </Stack>
             </SectionCard>
 
-            <SectionCard title="Edge Fleet" subtitle="Raspberry Pi nodes">
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {["pi-cam-01", "pi-cam-02", "pi-cam-03", "pi-cam-04"].map((n) => (
-                  <Chip key={n} label={`${n} · online`} size="small" sx={{ bgcolor: "rgba(16,217,126,0.12)", color: "#10d97e" }} />
-                ))}
-              </Stack>
-            </SectionCard>
           </Stack>
         </Grid>
       </Grid>
 
-      <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
-        <Button variant="contained" startIcon={<Save />}>Save Changes</Button>
-      </Box>
     </Box>
   );
 }

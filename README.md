@@ -8,10 +8,10 @@ PhysioVision 是一个面向康复训练场景的原型项目，包含治疗师�
 
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
-| 前端 | 可运行原型 | 页面和交互已完成，当前使用 `lib/mockData.ts` |
+| 前端 | 可运行原型 | 页面和交互已完成；业务列表仍使用 Mock，实时监测已接入后端 |
 | 本地动作监测 | 可独立运行 | 支持 MediaPipe 姿态识别、动作计数、错误录像和 Telegram 通知 |
-| FastAPI 后端 | 接口骨架 | 路由、模型和 Schema 已建立，部分接口仍返回演示数据 |
-| 系统集成 | 待完成 | 前端、后端和动作监测程序尚未形成实时数据闭环 |
+| FastAPI 后端 | 部分可用 | 已支持摄像头流和上传视频分析，其他业务接口仍有演示数据 |
+| 系统集成 | 核心监测已接通 | Dashboard 可显示 Bot 绘制的真实视频、骨架和动作状态 |
 
 ## 核心范围
 
@@ -89,11 +89,12 @@ npm run dev
 
 ### 后端
 
-需要 Python 3.10 或更高版本。
+推荐使用 Python 3.12。后端依赖必须安装到项目自己的
+`backend/.venv`，不要安装到系统 Python。
 
 ```powershell
 cd backend
-python -m venv .venv
+& "D:\Program Files\Python\Python312\python.exe" -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python main.py
@@ -102,6 +103,25 @@ python main.py
 - API：<http://localhost:8000>
 - Swagger：<http://localhost:8000/docs>
 - 健康检查：<http://localhost:8000/health>
+
+如果本机 Python 3.12 位于其他目录，请把示例中的解释器路径替换为
+实际路径。依赖安装完成后，也可以直接在项目根目录运行 `.\start.bat`
+同时启动 API 和前端。
+
+## 实时动作与视频上传
+
+打开 `/dashboard` 的 **Live Session Monitor**：
+
+1. 选择 Bicep curl、Squat、Plank 或 Push-up。
+2. 点击 **Live Camera** 使用后端电脑的摄像头。
+3. 或点击 **Upload Video** 上传已有训练视频。
+4. 面板会显示患者真实画面，以及 `Physio_AI_Bot` 绘制的同一套身体骨架、
+   手部关键点、次数、关节角度、动作提示和错误红框。
+5. 上传视频分析结束后可在面板内回放处理后的视频。
+
+当前版本一次只运行一个视觉任务。摄像头是运行 FastAPI 的电脑所连接的
+摄像头，不是浏览器所在设备的摄像头。上传上限为 500 MB；上传原文件会
+在分析结束后删除，当前处理结果会保留到下一项任务开始。
 
 ### 本地动作监测
 

@@ -4,7 +4,8 @@ Base URL: `https://api.physiovision.health/api/v1`
 Local: `http://localhost:8000/api/v1`
 Interactive docs: `/docs` (Swagger), `/redoc` (ReDoc)
 
-All timestamps are ISO-8601 UTC. Auth uses `Bearer <JWT>` (role: therapist / admin).
+All timestamps are ISO-8601 UTC. Authentication is not yet enforced in the
+current prototype.
 
 ---
 
@@ -41,24 +42,32 @@ All timestamps are ISO-8601 UTC. Auth uses `Bearer <JWT>` (role: therapist / adm
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/sessions/start` | Start a session (`patient_id`, `exercise_id`, `edge_node_id`) |
-| POST | `/sessions/{id}/frame` | Ingest pose frame (landmarks + angles) |
-| GET | `/sessions/{id}/summary` | Session summary metrics |
-| WS | `/sessions/{id}/ws` | Real-time telemetry stream (skeleton overlay) |
+| GET | `/sessions/monitor/status` | Current camera/upload job and movement metrics |
+| POST | `/sessions/monitor/live` | Start server camera (`exercise`, `camera_index`, `track_arm`) |
+| POST | `/sessions/monitor/upload` | Upload a video as multipart form data |
+| POST | `/sessions/monitor/stop` | Stop the active job |
+| GET | `/sessions/monitor/stream` | MJPEG stream containing real video + Bot HUD |
+| GET | `/sessions/monitor/result` | Processed WebM for the latest uploaded video |
 
-**PoseFrameIn**
-```json
-{ "session_id": 12, "ts": 3.24,
-  "landmarks": { "right_knee": [0.4, 0.7, 0.1] },
-  "joint_angles": { "right_knee": 92.3 } }
-```
+Supported exercise values are `bicep_curl`, `squat`, `plank`, and `pushup`.
+Only one monitoring job can run at a time. Uploads are limited to 500 MB.
 
-**LiveTelemetry (websocket payload)**
+**Monitor status**
+
 ```json
-{ "session_id": 12, "ts": 3.24, "rep_count": 5, "current_rom_deg": 95.0,
-  "movement_quality_score": 86, "risk_score": 22, "fatigue_index": 18,
-  "compensation_detected": false,
-  "skeleton": [[x,y], ...] }
+{
+  "phase": "running",
+  "source": "camera",
+  "exercise": "squat",
+  "progress": 4,
+  "target": 10,
+  "unit": "reps",
+  "form_status": "Squat reps: 4/10",
+  "form_ok": true,
+  "metric_label": "Knee",
+  "metric_value": 103.2,
+  "has_frame": true
+}
 ```
 
 ---
@@ -106,7 +115,11 @@ Severity: `info` · `warning` · `critical`. Delivered to Telegram + dashboard.
 
 ---
 
-## AI Agent Integration
+## Future AI Agent Integration
+
+The following pipeline is a design option and is not part of the current core
+runtime. Live monitoring uses the deterministic `Physio_AI_Bot` rules without
+Redis, an external LLM, FHIR, or MinIO.
 
 ```
 frame → movement_analysis → risk_assessment → rehab_coach

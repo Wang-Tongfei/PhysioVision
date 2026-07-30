@@ -13,6 +13,7 @@ out/
 
 # logs
 *.log
+*.err
 install*.log
 install.err
 
@@ -29,6 +30,7 @@ venv/
 clips/
 *.mp4
 *.avi
+backend/data/
 
 # Local diagnostics and exported pages
 _test_*.html

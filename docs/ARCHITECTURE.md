@@ -9,13 +9,14 @@
 ```mermaid
 flowchart LR
     Camera["摄像头或视频"] --> Bot["Physio_AI_Bot<br/>MediaPipe + OpenCV"]
-    Bot -. "待接入：会话结果" .-> API["FastAPI"]
-    API -. "待接入：REST/实时状态" .-> UI["Next.js 治疗师前端"]
+    Bot --> API["FastAPI<br/>监测引擎与 MJPEG"]
+    API --> UI["Next.js 治疗师前端"]
     UI --> Mock["lib/mockData.ts"]
     API --> SQLite["SQLite（目标持久化）"]
 ```
 
-当前三部分可以分别运行，但 Bot、API 和前端之间尚未完成数据连接。
+实时摄像头和上传视频分析已经接通。患者、报告等常规业务页面仍使用
+Mock 数据，数据库业务闭环尚待完成。
 
 ## 2. 前端
 
@@ -35,7 +36,8 @@ app/
     └── settings/page.tsx     /settings
 ```
 
-数据目前来自 `lib/mockData.ts`。后续集成应通过独立的数据访问层逐页替换 Mock，避免改动现有展示组件。
+患者、报告等数据目前来自 `lib/mockData.ts`。Live Session Monitor 已调用
+FastAPI。后续业务集成应通过独立的数据访问层逐页替换 Mock。
 
 ## 3. 后端
 
@@ -92,7 +94,9 @@ sequenceDiagram
     A-->>U: 返回 JSON
 ```
 
-第一阶段可以只提交会话结束摘要，不必立即引入逐帧上传或 WebSocket。实时显示确有需要时，再增加低频遥测接口。
+当前实时画面使用 MJPEG，因为它能直接传输 Bot 完成 HUD 绘制后的同一张
+OpenCV 帧，适合单机或局域网原型。状态通过低频 REST 轮询获取。需要公网、
+音频或多路低延迟视频时再升级为 WebRTC。
 
 ## 6. 暂不纳入核心范围
 

@@ -1,7 +1,11 @@
 """Application configuration loaded from environment / .env file."""
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -11,7 +15,11 @@ class Settings(BaseSettings):
     local `.env` file (see `.env.example`) or the host environment.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     PROJECT_NAME: str = "PhysioVision"
     VERSION: str = "0.1.0"

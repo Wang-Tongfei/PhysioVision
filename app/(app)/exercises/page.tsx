@@ -5,12 +5,12 @@ import { FitnessCenter, PlayCircle, Assignment, Add } from "@mui/icons-material"
 import SectionCard from "@/components/common/SectionCard";
 
 const exercises = [
-  { name: "Knee Flexion AROM", protocol: "ACL Rehab", sets: "3×12", focus: "Mobility", color: "#22d3ee" },
-  { name: "Single-Leg Balance", protocol: "Ankle Sprain", sets: "3×30s", focus: "Proprioception", color: "#10d97e" },
-  { name: "Hip Bridge", protocol: "Low Back", sets: "3×15", focus: "Strength", color: "#f5b73b" },
-  { name: "Shoulder ER", protocol: "Rotator Cuff", sets: "3×12", focus: "Stability", color: "#a78bfa" },
-  { name: "Heel Raises", protocol: "Achilles", sets: "3×15", focus: "Strength", color: "#3b82f6" },
-  { name: "Step-Ups", protocol: "Knee OA", sets: "3×10", focus: "Function", color: "#22d3ee" },
+  { name: "Knee Flexion AROM", protocol: "ACL Rehab", sets: "3×12", focus: "Mobility", color: "#f0b84b" },
+  { name: "Single-Leg Balance", protocol: "Ankle Sprain", sets: "3×30s", focus: "Proprioception", color: "#e18a42" },
+  { name: "Hip Bridge", protocol: "Low Back", sets: "3×15", focus: "Strength", color: "#c6a447" },
+  { name: "Shoulder ER", protocol: "Rotator Cuff", sets: "3×12", focus: "Stability", color: "#d36f8b" },
+  { name: "Heel Raises", protocol: "Achilles", sets: "3×15", focus: "Strength", color: "#e36f5c" },
+  { name: "Step-Ups", protocol: "Knee OA", sets: "3×10", focus: "Function", color: "#c76445" },
 ];
 
 export default function ExercisesPage() {
