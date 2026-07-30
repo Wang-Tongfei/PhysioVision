@@ -121,9 +121,14 @@ export default function LandingPage() {
           </Box>
 
           <Box sx={{ flexGrow: 1, display: { xs: "none", md: "flex" }, gap: { md: 3, lg: 4 }, justifyContent: "center" }}>
-            {["Platform", "Features", "Pricing", "Docs"].map((t) => (
-              <Button key={t} sx={{ color: "text.secondary", textTransform: "none", fontWeight: 600, fontSize: 15 }}>
-                {t}
+            {[
+              ["Platform", "#platform"],
+              ["Features", "#features"],
+              ["Pricing", "#pricing"],
+              ["Docs", "#docs"],
+            ].map(([label, href]) => (
+              <Button key={label} component={Link} href={href} sx={{ color: "text.secondary", textTransform: "none", fontWeight: 600, fontSize: 15 }}>
+                {label}
               </Button>
             ))}
           </Box>
@@ -150,7 +155,7 @@ export default function LandingPage() {
       </Box>
 
       {/* ===== Hero ===== */}
-      <Container maxWidth="xl" sx={{ position: "relative", zIndex: 1, pt: { xs: 6, md: 10 }, pb: { xs: 6, md: 10 } }}>
+      <Container id="platform" maxWidth="xl" sx={{ position: "relative", zIndex: 1, pt: { xs: 6, md: 10 }, pb: { xs: 6, md: 10 }, scrollMarginTop: 80 }}>
         <Stack spacing={3} alignItems="center" textAlign="center">
           <Box
             className="badge badge-info"
@@ -284,7 +289,7 @@ export default function LandingPage() {
       </Container>
 
       {/* ===== Features ===== */}
-      <Container maxWidth="lg" sx={{ pt: { xs: 3, md: 5 }, pb: { xs: 6, md: 10 } }}>
+      <Container id="features" maxWidth="lg" sx={{ pt: { xs: 3, md: 5 }, pb: { xs: 6, md: 10 }, scrollMarginTop: 80 }}>
         <Stack spacing={1.5} alignItems="center" textAlign="center" mb={6}>
           <Typography variant="h2" sx={{ fontWeight: 800, fontSize: { xs: 32, md: 46 } }}>
             Everything a modern clinic needs
@@ -366,7 +371,7 @@ export default function LandingPage() {
       </Container>
 
       {/* ===== CTA ===== */}
-      <Container maxWidth="md" sx={{ py: { xs: 2, md: 3 } }}>
+      <Container id="pricing" maxWidth="md" sx={{ py: { xs: 2, md: 3 }, scrollMarginTop: 80 }}>
         <Box
           className="glass-card"
           sx={{
@@ -419,6 +424,7 @@ export default function LandingPage() {
 
       {/* ===== Footer ===== */}
       <Box
+        id="docs"
         component="footer"
         sx={{
           borderTop: "1px solid rgba(34,211,238,0.15)",
@@ -455,9 +461,9 @@ export default function LandingPage() {
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
               © {new Date().getFullYear()} PhysioVision. All rights reserved.
             </Typography>
-            <Stack direction="row" spacing={3}>
+            <Stack id="terms" direction="row" spacing={3}>
               {["Privacy", "Terms", "Contact"].map((t) => (
-                <Typography key={t} variant="caption" sx={{ color: "text.secondary", cursor: "pointer" }}>
+                <Typography id={t === "Privacy" ? "privacy" : undefined} key={t} variant="caption" sx={{ color: "text.secondary", cursor: "pointer" }}>
                   {t}
                 </Typography>
               ))}

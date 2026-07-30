@@ -4,18 +4,21 @@ import { Box, Typography, Stack, Chip, LinearProgress, Avatar } from "@mui/mater
 import { Person, ChevronRight } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import { patients } from "@/lib/mockData";
+import { useRouter } from "next/navigation";
 
 const riskColor: Record<string, string> = {
   Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
 };
 
 export default function PatientCards() {
+  const router = useRouter();
   return (
     <SectionCard title="Active Patients" subtitle={`${patients.length} in treatment`} icon={<Person />}>
       <Stack spacing={1.5}>
         {patients.map((p) => (
           <Box
             key={p.id}
+            onClick={() => router.push(`/patients?patient=${p.id}`)}
             sx={{
               borderRadius: "12px",
               p: 1.5,

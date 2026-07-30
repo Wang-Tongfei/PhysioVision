@@ -15,6 +15,8 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import {
   Visibility,
@@ -39,6 +41,8 @@ export default function RegisterPage() {
   const router = useRouter();
   const [showPw, setShowPw] = useState(false);
   const [showPw2, setShowPw2] = useState(false);
+  const [agreed, setAgreed] = useState(true);
+  const [message, setMessage] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -52,6 +56,28 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name.trim() || !form.clinic.trim()) {
+      setMessage("Name and clinic are required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setMessage("Enter a valid work email.");
+      return;
+    }
+    if (form.password.length < 8) {
+      setMessage("Password must contain at least 8 characters.");
+      return;
+    }
+    if (form.password !== form.confirm) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+    if (!agreed) {
+      setMessage("Accept the Terms and Privacy Policy to continue.");
+      return;
+    }
+    localStorage.setItem("physiovision.account", JSON.stringify({ name: form.name, email: form.email, clinic: form.clinic, plan: form.plan }));
+    localStorage.setItem("physiovision.session", JSON.stringify({ email: form.email, signedInAt: new Date().toISOString() }));
     router.push("/dashboard");
   };
 
@@ -189,7 +215,7 @@ export default function RegisterPage() {
                     startAdornment: <InputAdornment position="start"><Lock sx={iconSx} /></InputAdornment>,
                     endAdornment: (
                       <InputAdornment position="end">
-                        <IconButton onClick={() => setShowPw((s) => !s)} edge="end"><Visibility sx={{ fontSize: 20 }} /></IconButton>
+                        <IconButton onClick={() => setShowPw((s) => !s)} edge="end">{showPw ? <VisibilityOff sx={{ fontSize: 20 }} /> : <Visibility sx={{ fontSize: 20 }} />}</IconButton>
                       </InputAdornment>
                     ),
                   }}
@@ -209,7 +235,7 @@ export default function RegisterPage() {
                     startAdornment: <InputAdornment position="start"><Lock sx={iconSx} /></InputAdornment>,
                     endAdornment: (
                       <InputAdornment position="end">
-                        <IconButton onClick={() => setShowPw2((s) => !s)} edge="end"><VisibilityOff sx={{ fontSize: 20 }} /></IconButton>
+                        <IconButton onClick={() => setShowPw2((s) => !s)} edge="end">{showPw2 ? <VisibilityOff sx={{ fontSize: 20 }} /> : <Visibility sx={{ fontSize: 20 }} />}</IconButton>
                       </InputAdornment>
                     ),
                   }}
@@ -232,11 +258,11 @@ export default function RegisterPage() {
             </TextField>
 
             <FormControlLabel
-              control={<Checkbox size="small" sx={{ color: "#22d3ee" }} defaultChecked />}
+              control={<Checkbox size="small" sx={{ color: "#22d3ee" }} checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />}
               label={
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  I agree to the <Link href="#" style={{ color: "#22d3ee" }}>Terms</Link> &{" "}
-                  <Link href="#" style={{ color: "#22d3ee" }}>Privacy Policy</Link>
+                  I agree to the <Link href="/#terms" style={{ color: "#22d3ee" }}>Terms</Link> &{" "}
+                  <Link href="/#privacy" style={{ color: "#22d3ee" }}>Privacy Policy</Link>
                 </Typography>
               }
             />
@@ -249,15 +275,18 @@ export default function RegisterPage() {
           <Divider sx={{ my: 2, color: "text.secondary" }}>or sign up with</Divider>
 
           <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Button fullWidth className="btn-ghost" startIcon={<Google />} onClick={() => router.push("/dashboard")}>
+            <Button fullWidth className="btn-ghost" startIcon={<Google />} onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "Google" })); router.push("/dashboard"); }}>
               Google
             </Button>
-            <Button fullWidth className="btn-ghost" startIcon={<GitHub />} onClick={() => router.push("/dashboard")}>
+            <Button fullWidth className="btn-ghost" startIcon={<GitHub />} onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "GitHub" })); router.push("/dashboard"); }}>
               GitHub
             </Button>
           </Box>
         </Box>
       </Box>
+      <Snackbar open={Boolean(message)} autoHideDuration={3500} onClose={() => setMessage("")}>
+        <Alert severity="error" onClose={() => setMessage("")}>{message}</Alert>
+      </Snackbar>
     </Box>
   );
 }

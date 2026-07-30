@@ -1,17 +1,59 @@
 "use client";
 
-import { Box, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment } from "@mui/material";
+import { useMemo, useState } from "react";
+import { Box, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
 import { Search, PersonAdd, EmojiEvents, LocalHospital, People } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import EChart from "@/components/charts/EChart";
 import { lineOption } from "@/components/charts/chartOptions";
 import { patients } from "@/lib/mockData";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 const riskColor: Record<string, string> = {
   Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
 };
 
 export default function PatientsPage() {
+  const [records, setRecords] = usePersistentState("physiovision.patients", patients);
+  const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [selected, setSelected] = useState<(typeof patients)[number] | null>(null);
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState({ name: "", mrn: "", age: "40", diagnosis: "", risk: "Low" });
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return needle
+      ? records.filter((p) => `${p.name} ${p.mrn} ${p.diagnosis}`.toLowerCase().includes(needle))
+      : records;
+  }, [query, records]);
+
+  const addPatient = () => {
+    if (!form.name.trim() || !form.mrn.trim()) {
+      setMessage("Name and MRN are required.");
+      return;
+    }
+    if (records.some((p) => p.mrn.toLowerCase() === form.mrn.trim().toLowerCase())) {
+      setMessage("This MRN already exists.");
+      return;
+    }
+    const next = {
+      id: Math.max(0, ...records.map((p) => p.id)) + 1,
+      name: form.name.trim(),
+      mrn: form.mrn.trim(),
+      age: Number(form.age) || 0,
+      diagnosis: form.diagnosis.trim() || "Assessment pending",
+      risk: form.risk,
+      score: 0,
+      adherence: 0,
+      last: "New",
+      trend: [0, 0, 0, 0, 0, 0],
+    };
+    setRecords((current) => [next, ...current]);
+    setAddOpen(false);
+    setForm({ name: "", mrn: "", age: "40", diagnosis: "", risk: "Low" });
+    setMessage(`${next.name} was added.`);
+  };
+
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
@@ -20,13 +62,15 @@ export default function PatientsPage() {
             Patients
           </Typography>
           <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            {patients.length} active patients under your care
+            {records.length} active patients under your care
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
           <TextField
             size="small"
             placeholder="Search patient / MRN"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             sx={{
               "& .MuiOutlinedInput-root": {
                 "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
@@ -37,21 +81,22 @@ export default function PatientsPage() {
             }}
             InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" sx={{ color: "text.secondary" }} /></InputAdornment>) }}
           />
-          <Button variant="contained" startIcon={<PersonAdd />}>Add Patient</Button>
+          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setAddOpen(true)}>Add Patient</Button>
         </Stack>
       </Stack>
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} lg={8}>
           <Grid container spacing={2.5}>
-            {patients.map((p) => (
+            {visible.map((p) => (
               <Grid item xs={12} md={6} key={p.id}>
-                <SectionCard
-                  title={p.name}
-                  subtitle={p.mrn}
-                  icon={<People sx={{ fontSize: 20 }} />}
-                  action={<Chip label={p.risk} size="small" sx={{ bgcolor: riskColor[p.risk] + "22", color: riskColor[p.risk], fontWeight: 700, border: `1px solid ${riskColor[p.risk]}40` }} />}
-                >
+                <Box onClick={() => setSelected(p)} sx={{ cursor: "pointer" }}>
+                  <SectionCard
+                    title={p.name}
+                    subtitle={p.mrn}
+                    icon={<People sx={{ fontSize: 20 }} />}
+                    action={<Chip label={p.risk} size="small" sx={{ bgcolor: riskColor[p.risk] + "22", color: riskColor[p.risk], fontWeight: 700, border: `1px solid ${riskColor[p.risk]}40` }} />}
+                  >
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Avatar
                       sx={{
@@ -73,9 +118,15 @@ export default function PatientsPage() {
                   <Box sx={{ mt: 1.5 }}>
                     <EChart height={120} option={lineOption(["W1","W2","W3","W4","W5","W6"], [{ name: "ROM", data: p.trend, color: riskColor[p.risk] }])} />
                   </Box>
-                </SectionCard>
+                  </SectionCard>
+                </Box>
               </Grid>
             ))}
+            {visible.length === 0 && (
+              <Grid item xs={12}>
+                <Alert severity="info">No patients match “{query}”.</Alert>
+              </Grid>
+            )}
           </Grid>
         </Grid>
 
@@ -104,6 +155,51 @@ export default function PatientsPage() {
           </Stack>
         </Grid>
       </Grid>
+
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Add patient</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus required />
+            <TextField label="MRN" value={form.mrn} onChange={(e) => setForm({ ...form, mrn: e.target.value })} required />
+            <TextField label="Age" type="number" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} inputProps={{ min: 0, max: 120 }} />
+            <TextField label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
+            <TextField select label="Risk" value={form.risk} onChange={(e) => setForm({ ...form, risk: e.target.value })}>
+              {["Low", "Moderate", "High"].map((risk) => <MenuItem key={risk} value={risk}>{risk}</MenuItem>)}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={addPatient}>Add patient</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{selected?.name}</DialogTitle>
+        <DialogContent>
+          {selected && (
+            <Stack spacing={1.5}>
+              <Typography color="text.secondary">{selected.mrn} · {selected.age} years old</Typography>
+              <Typography>{selected.diagnosis}</Typography>
+              <Stack direction="row" spacing={1}>
+                <Chip label={`${selected.risk} risk`} sx={{ color: riskColor[selected.risk] }} />
+                <Chip label={`Score ${selected.score}`} />
+                <Chip label={`${selected.adherence}% adherence`} />
+              </Stack>
+              <EChart height={180} option={lineOption(["W1","W2","W3","W4","W5","W6"], [{ name: "ROM", data: selected.trend, color: riskColor[selected.risk] }])} />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSelected(null)}>Close</Button>
+          <Button variant="contained" onClick={() => { setSelected(null); setMessage("Patient record opened for review."); }}>Review record</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
+        <Alert severity={message.includes("required") || message.includes("exists") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
+      </Snackbar>
     </Box>
   );
 }

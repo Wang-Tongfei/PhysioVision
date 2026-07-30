@@ -15,6 +15,13 @@ import {
   IconButton,
   Tooltip,
   Badge,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  InputAdornment,
+  TextField,
   useTheme,
   alpha,
 } from "@mui/material";
@@ -31,6 +38,7 @@ import {
   Logout as LogoutIcon,
   FiberManualRecord as LiveIcon,
 } from "@mui/icons-material";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 const navItems = [
   { text: "Dashboard", icon: <DashboardIcon />, href: "/dashboard" },
@@ -42,7 +50,7 @@ const navItems = [
 
 const DRAWER_WIDTH = 250;
 
-function SidebarContent() {
+function SidebarContent({ onLogout, onNavigate }: { onLogout: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
   const theme = useTheme();
 
@@ -103,6 +111,7 @@ function SidebarContent() {
               key={item.text}
               component={Link}
               href={item.href}
+              onClick={onNavigate}
               className={active ? "nav-link active" : "nav-link"}
               sx={{ mb: 0.5, borderRadius: 2, p: 0, "&:hover": { background: "transparent" } }}
             >
@@ -153,7 +162,7 @@ function SidebarContent() {
           </Typography>
         </Box>
         <Tooltip title="Sign out">
-          <IconButton size="small" sx={{ color: "text.secondary" }}>
+          <IconButton size="small" onClick={onLogout} sx={{ color: "text.secondary" }}>
             <LogoutIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -171,8 +180,14 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [notificationsRead, setNotificationsRead, notificationsReady] =
+    usePersistentState("physiovision.notificationsRead", false);
 
   const handleLogout = () => {
+    localStorage.removeItem("physiovision.session");
     router.push("/login");
   };
 
@@ -197,7 +212,7 @@ export default function DashboardLayout({
         }}
         open
       >
-        <SidebarContent />
+        <SidebarContent onLogout={handleLogout} />
       </Drawer>
 
       {/* Mobile drawer */}
@@ -216,7 +231,7 @@ export default function DashboardLayout({
           },
         }}
       >
-        <SidebarContent />
+        <SidebarContent onLogout={handleLogout} onNavigate={() => setMobileOpen(false)} />
       </Drawer>
 
       {/* Main content */}
@@ -246,6 +261,10 @@ export default function DashboardLayout({
           </Box>
 
           <Box
+            onClick={() => setSearchOpen(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => event.key === "Enter" && setSearchOpen(true)}
             sx={{
               display: { xs: "none", sm: "flex" },
               alignItems: "center",
@@ -256,6 +275,7 @@ export default function DashboardLayout({
               background: "rgba(11,30,51,0.6)",
               border: "1px solid rgba(34,211,238,0.18)",
               minWidth: 220,
+              cursor: "pointer",
             }}
           >
             <SearchIcon sx={{ color: "text.secondary", fontSize: 18 }} />
@@ -265,8 +285,18 @@ export default function DashboardLayout({
           </Box>
 
           <Tooltip title="Notifications">
-            <IconButton sx={{ color: "text.secondary" }}>
-              <Badge badgeContent={3} color="error">
+            <IconButton
+              onClick={() => {
+                setNotificationsRead(true);
+                setNotificationsOpen(true);
+              }}
+              sx={{ color: "text.secondary" }}
+            >
+              <Badge
+                badgeContent={notificationsRead ? 0 : 3}
+                color="error"
+                invisible={!notificationsReady || notificationsRead}
+              >
                 <NotificationsIcon />
               </Badge>
             </IconButton>
@@ -293,6 +323,55 @@ export default function DashboardLayout({
           {children}
         </Box>
       </Box>
+
+      <Dialog open={searchOpen} onClose={() => setSearchOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Search PhysioVision</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder="Search patients, exercises or modules"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
+            sx={{ mt: 1, mb: 2 }}
+          />
+          <List>
+            {[
+              { label: "Patients", detail: "Patient records and progress", href: "/patients" },
+              { label: "Exercises", detail: "Exercise library and prescriptions", href: "/exercises" },
+              { label: "Reports", detail: "SOAP notes and FHIR exports", href: "/reports" },
+              { label: "Settings", detail: "Clinic, notifications and AI agents", href: "/settings" },
+            ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(search.toLowerCase())).map((item) => (
+              <ListItemButton key={item.href} onClick={() => { setSearchOpen(false); setSearch(""); router.push(item.href); }} sx={{ borderRadius: 2 }}>
+                <ListItemText primary={item.label} secondary={item.detail} />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setSearchOpen(false)}>Close</Button></DialogActions>
+      </Dialog>
+
+      <Dialog open={notificationsOpen} onClose={() => setNotificationsOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Notifications</DialogTitle>
+        <DialogContent>
+          <List>
+            {[
+              ["Critical · Goh Hock Seng", "Pelvic compensation detected 2 minutes ago."],
+              ["Warning · Chua Seow Ling", "Fatigue index exceeded 70%."],
+              ["Report ready", "Siti Rahman's SOAP report is ready to review."],
+            ].map(([title, detail]) => (
+              <ListItemButton key={title} onClick={() => { setNotificationsOpen(false); router.push("/reports"); }} sx={{ borderRadius: 2 }}>
+                <ListItemText primary={title} secondary={detail} />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNotificationsOpen(false)}>Close</Button>
+          <Button variant="contained" onClick={() => { setNotificationsOpen(false); router.push("/reports"); }}>View reports</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

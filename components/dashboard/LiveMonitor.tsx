@@ -13,6 +13,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   MenuItem,
   Select,
@@ -20,6 +24,7 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  ArrowBack,
   FiberManualRecord,
   MonitorHeart,
   Stop,
@@ -28,6 +33,7 @@ import {
 } from "@mui/icons-material";
 import SkeletonOverlay from "./SkeletonOverlay";
 import { livePatients } from "@/lib/mockData";
+import { usePersistentState } from "@/lib/usePersistentState";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -102,6 +108,13 @@ export default function LiveMonitor() {
   const [busy, setBusy] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [streamKey, setStreamKey] = useState(0);
+  const [cameraConfirmOpen, setCameraConfirmOpen] = useState(false);
+  const [cameraErrorDismissed, setCameraErrorDismissed] = useState(false);
+  const [dismissedResultJob, setDismissedResultJob, dismissalReady] =
+    usePersistentState<string | null>(
+      "physiovision.dismissedMonitorResultJob",
+      null
+    );
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -123,6 +136,8 @@ export default function LiveMonitor() {
   }, [refreshStatus]);
 
   const startLive = async () => {
+    setCameraConfirmOpen(false);
+    setCameraErrorDismissed(false);
     setBusy(true);
     setConnectionError(null);
     try {
@@ -139,6 +154,18 @@ export default function LiveMonitor() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const openCameraPrompt = () => {
+    setConnectionError(null);
+    setCameraErrorDismissed(true);
+    setCameraConfirmOpen(true);
+  };
+
+  const cancelCameraPrompt = () => {
+    setCameraConfirmOpen(false);
+    setConnectionError(null);
+    setCameraErrorDismissed(true);
   };
 
   const selectUpload = () => uploadInput.current?.click();
@@ -184,11 +211,34 @@ export default function LiveMonitor() {
   };
 
   const active = ["starting", "running", "stopping"].includes(status.phase);
-  const showStream = status.has_frame && !status.has_result_video;
+  const resultDismissed =
+    status.job_id !== null && dismissedResultJob === status.job_id;
+  const showCameraSnapshot =
+    dismissalReady &&
+    status.source === "camera" &&
+    status.has_frame &&
+    ["completed", "stopped"].includes(status.phase) &&
+    !resultDismissed;
+  const cameraInactive =
+    status.source === "camera" &&
+    !active &&
+    !showCameraSnapshot &&
+    (status.phase !== "error" || cameraErrorDismissed);
+  const uploadResultClosed =
+    status.source === "upload" &&
+    !active &&
+    (!dismissalReady || resultDismissed);
+  const monitorIdleView = cameraInactive || uploadResultClosed;
+  const showStream =
+    (active || showCameraSnapshot) &&
+    status.has_frame &&
+    !status.has_result_video;
   const showResult =
+    dismissalReady &&
     status.source === "upload" &&
     status.has_result_video &&
-    ["completed", "stopped"].includes(status.phase);
+    ["completed", "stopped"].includes(status.phase) &&
+    !resultDismissed;
   const progressLabel =
     status.unit === "sec"
       ? `${status.progress.toFixed(1)} / ${status.target.toFixed(0)} SEC`
@@ -225,7 +275,9 @@ export default function LiveMonitor() {
               Live Session Monitor
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              {status.source_label ?? "Local vision station"}
+              {monitorIdleView
+                ? "Local vision station"
+                : status.source_label ?? "Local vision station"}
             </Typography>
           </Box>
         </Stack>
@@ -255,7 +307,7 @@ export default function LiveMonitor() {
             size="small"
             variant="contained"
             startIcon={<Videocam />}
-            onClick={startLive}
+            onClick={openCameraPrompt}
             disabled={busy || active}
           >
             Live Camera
@@ -335,6 +387,25 @@ export default function LiveMonitor() {
           </Box>
         )}
 
+        {(showResult || showCameraSnapshot) && (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<ArrowBack />}
+            onClick={() => setDismissedResultJob(status.job_id)}
+            sx={{
+              position: "absolute",
+              left: 12,
+              top: 12,
+              bgcolor: "rgba(4,16,31,0.82)",
+              color: "#fff",
+              "&:hover": { bgcolor: "rgba(4,16,31,0.96)" },
+            }}
+          >
+            Back to Monitor
+          </Button>
+        )}
+
         {(busy || status.phase === "starting") && (
           <Stack
             alignItems="center"
@@ -366,7 +437,9 @@ export default function LiveMonitor() {
               ? status.source === "upload"
                 ? "ANALYZING VIDEO"
                 : "LIVE · CAM-01"
-              : status.phase.toUpperCase()
+              : monitorIdleView
+                ? "IDLE"
+                : status.phase.toUpperCase()
           }
           size="small"
           sx={{
@@ -381,7 +454,7 @@ export default function LiveMonitor() {
         />
       </Box>
 
-      {status.has_frame && (
+      {active && status.has_frame && (
         <Stack
           direction={{ xs: "column", sm: "row" }}
           alignItems={{ xs: "flex-start", sm: "center" }}
@@ -413,7 +486,7 @@ export default function LiveMonitor() {
         </Stack>
       )}
 
-      {status.phase === "error" && (
+      {status.phase === "error" && !cameraErrorDismissed && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {status.error}
         </Alert>
@@ -460,6 +533,27 @@ export default function LiveMonitor() {
           </Box>
         ))}
       </Stack>
+
+      <Dialog
+        open={cameraConfirmOpen}
+        onClose={cancelCameraPrompt}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Start live camera?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            PhysioVision will use the camera connected to this computer for
+            live movement analysis. No camera will be opened until you confirm.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelCameraPrompt}>Cancel</Button>
+          <Button variant="contained" onClick={startLive}>
+            Allow &amp; Start
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -13,6 +13,12 @@ import {
   Divider,
   Checkbox,
   FormControlLabel,
+  Alert,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Snackbar,
 } from "@mui/material";
 import {
   Visibility,
@@ -29,9 +35,20 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [email, setEmail] = useState("therapist@clinic.com");
   const [password, setPassword] = useState("demo1234");
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [message, setMessage] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setMessage("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 6) {
+      setMessage("Password must contain at least 6 characters.");
+      return;
+    }
+    localStorage.setItem("physiovision.session", JSON.stringify({ email, signedInAt: new Date().toISOString() }));
     router.push("/dashboard");
   };
 
@@ -189,9 +206,9 @@ export default function LoginPage() {
                 control={<Checkbox size="small" sx={{ color: "#22d3ee" }} defaultChecked />}
                 label={<Typography variant="caption" sx={{ color: "text.secondary" }}>Remember me</Typography>}
               />
-              <Link href="#" style={{ color: "#22d3ee", textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+              <Button variant="text" size="small" onClick={() => setForgotOpen(true)} sx={{ color: "#22d3ee", textTransform: "none", fontSize: 13, fontWeight: 600 }}>
                 Forgot password?
-              </Link>
+              </Button>
             </Box>
 
             <Button type="submit" variant="contained" sx={{ width: "100%", py: 1.4, fontSize: 15 }}>
@@ -206,7 +223,7 @@ export default function LoginPage() {
               fullWidth
               className="btn-ghost"
               startIcon={<Google />}
-              onClick={() => router.push("/dashboard")}
+              onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "Google" })); router.push("/dashboard"); }}
             >
               Google
             </Button>
@@ -214,7 +231,7 @@ export default function LoginPage() {
               fullWidth
               className="btn-ghost"
               startIcon={<GitHub />}
-              onClick={() => router.push("/dashboard")}
+              onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "GitHub" })); router.push("/dashboard"); }}
             >
               GitHub
             </Button>
@@ -225,6 +242,21 @@ export default function LoginPage() {
           </Typography>
         </Box>
       </Box>
+
+      <Dialog open={forgotOpen} onClose={() => setForgotOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Reset password</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary" mb={2}>We will send reset instructions to your work email.</Typography>
+          <TextField fullWidth label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setForgotOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => { setForgotOpen(false); setMessage("Password reset instructions sent."); }}>Send instructions</Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
+        <Alert severity={message.includes("sent") ? "success" : "error"} onClose={() => setMessage("")}>{message}</Alert>
+      </Snackbar>
     </Box>
   );
 }
