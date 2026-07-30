@@ -16,6 +16,17 @@ class ExerciseOut(BaseModel):
     instructions: Optional[str] = None
 
 
+class ExerciseCreate(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    target_body_part: Optional[str] = None
+    default_reps: int = 10
+    default_sets: int = 3
+    target_rom_deg: Optional[float] = None
+    instructions: Optional[str] = None
+
+
 class PrescriptionCreate(BaseModel):
     patient_id: int
     exercise_id: int

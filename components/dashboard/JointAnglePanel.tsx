@@ -5,8 +5,17 @@ import GaugeRing from "@/components/common/GaugeRing";
 import SectionCard from "@/components/common/SectionCard";
 import { Route, Straighten } from "@mui/icons-material";
 import { jointAngles } from "@/lib/mockData";
+import { useDataMode } from "@/lib/dataMode";
 
 export default function JointAnglePanel() {
+  const { mode } = useDataMode();
+  if (mode === "live") {
+    return (
+      <SectionCard title="Joint Angle Tracking" subtitle="Real session telemetry" icon={<Route />}>
+        <Typography color="text.secondary">Start a live camera or uploaded-video analysis to populate joint-angle telemetry. Demo angles are hidden in Real data mode.</Typography>
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard
       title="Joint Angle Tracking"

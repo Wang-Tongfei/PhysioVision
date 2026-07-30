@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -39,6 +39,8 @@ import {
   FiberManualRecord as LiveIcon,
 } from "@mui/icons-material";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { clearSession, getSession, SessionUser } from "@/lib/api";
+import { DataModeProvider } from "@/lib/dataMode";
 
 const navItems = [
   { text: "Dashboard", icon: <DashboardIcon />, href: "/dashboard" },
@@ -50,7 +52,7 @@ const navItems = [
 
 const DRAWER_WIDTH = 250;
 
-function SidebarContent({ onLogout, onNavigate }: { onLogout: () => void; onNavigate?: () => void }) {
+function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; onNavigate?: () => void; user: SessionUser | null }) {
   const pathname = usePathname();
   const theme = useTheme();
 
@@ -151,14 +153,14 @@ function SidebarContent({ onLogout, onNavigate }: { onLogout: () => void; onNavi
         }}
       >
         <Avatar sx={{ width: 36, height: 36, background: "linear-gradient(135deg,#0891b2,#22d3ee)", fontSize: 14 }}>
-          DR
+          {(user?.full_name || "Demo User").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>
-            Dr. Sarah Kim
+            {user?.full_name || "Demo User"}
           </Typography>
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            Lead Therapist
+            {user?.role?.replaceAll("_", " ") || "Demo mode"}
           </Typography>
         </Box>
         <Tooltip title="Sign out">
@@ -171,7 +173,7 @@ function SidebarContent({ onLogout, onNavigate }: { onLogout: () => void; onNavi
   );
 }
 
-export default function DashboardLayout({
+function DashboardShell({
   children,
 }: {
   children: React.ReactNode;
@@ -185,10 +187,20 @@ export default function DashboardLayout({
   const [search, setSearch] = useState("");
   const [notificationsRead, setNotificationsRead, notificationsReady] =
     usePersistentState("physiovision.notificationsRead", false);
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session?.access_token) {
+      router.replace("/login");
+      return;
+    }
+    setUser(session.user);
+  }, [router]);
 
   const handleLogout = () => {
-    localStorage.removeItem("physiovision.session");
-    router.push("/login");
+    clearSession();
+    router.push("/login?relogin=1");
   };
 
   return (
@@ -212,7 +224,7 @@ export default function DashboardLayout({
         }}
         open
       >
-        <SidebarContent onLogout={handleLogout} />
+        <SidebarContent onLogout={handleLogout} user={user} />
       </Drawer>
 
       {/* Mobile drawer */}
@@ -231,7 +243,7 @@ export default function DashboardLayout({
           },
         }}
       >
-        <SidebarContent onLogout={handleLogout} onNavigate={() => setMobileOpen(false)} />
+        <SidebarContent onLogout={handleLogout} user={user} onNavigate={() => setMobileOpen(false)} />
       </Drawer>
 
       {/* Main content */}
@@ -373,5 +385,13 @@ export default function DashboardLayout({
         </DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <DataModeProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </DataModeProvider>
   );
 }

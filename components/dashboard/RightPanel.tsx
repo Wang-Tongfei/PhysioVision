@@ -5,6 +5,7 @@ import GaugeRing from "@/components/common/GaugeRing";
 import SectionCard from "@/components/common/SectionCard";
 import { Shield, Speed, BatteryAlert, SyncProblem, AutoAwesome } from "@mui/icons-material";
 import { aiRecommendation } from "@/lib/mockData";
+import { useDataMode } from "@/lib/dataMode";
 
 function MetricRow({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   const num = parseInt(value);
@@ -48,6 +49,14 @@ function MetricRow({ icon, label, value, color }: { icon: React.ReactNode; label
 }
 
 export default function RightPanel() {
+  const { mode } = useDataMode();
+  if (mode === "live") {
+    return (
+      <SectionCard title="Risk Assessment" subtitle="Real AI evaluation" icon={<Shield />}>
+        <Typography color="text.secondary">Complete a monitored session to generate a real risk assessment and recommendation. Demo recommendations are hidden in Real data mode.</Typography>
+      </SectionCard>
+    );
+  }
   const r = aiRecommendation;
   const riskColor = r.riskScore < 33 ? "#10d97e" : r.riskScore < 66 ? "#f5b73b" : "#ef5b5b";
 

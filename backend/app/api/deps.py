@@ -10,6 +10,5 @@ from app.core.database import get_db
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-# TODO: implement and wire an authenticated-user dependency, e.g.:
-#   CurrentUser = Annotated[User, Depends(get_current_user)]
-#   async def get_current_user(token: str = Depends(oauth2_scheme)) -> User: ...
+# The authenticated-user dependency is implemented in
+# app.api.v1.endpoints.auth.current_user and applied to clinic-scoped endpoints.

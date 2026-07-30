@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Grid,
@@ -31,9 +31,33 @@ import JointAnglePanel from "@/components/dashboard/JointAnglePanel";
 import RightPanel from "@/components/dashboard/RightPanel";
 import HistoricalTrends from "@/components/dashboard/HistoricalTrends";
 import PatientCards from "@/components/dashboard/PatientCards";
+import { api, getSession } from "@/lib/api";
+import { useDataMode } from "@/lib/dataMode";
 
 export default function DashboardPage() {
   const theme = useTheme();
+  const { mode } = useDataMode();
+  const [displayName, setDisplayName] = useState("Therapist");
+  const [kpi, setKpi] = useState({
+    active_patients: 48,
+    sessions_today: 6,
+    avg_quality: 92,
+    alert_rate: 0.03,
+  });
+
+  useEffect(() => {
+    setDisplayName(getSession()?.user?.full_name || "Therapist");
+  }, []);
+
+  useEffect(() => {
+    if (mode === "demo") {
+      setKpi({ active_patients: 48, sessions_today: 6, avg_quality: 92, alert_rate: 0.03 });
+      return;
+    }
+    api<typeof kpi>("/analytics/clinic/kpi").then(setKpi).catch(() => {
+      setKpi({ active_patients: 0, sessions_today: 0, avg_quality: 0, alert_rate: 0 });
+    });
+  }, [mode]);
 
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
@@ -47,7 +71,7 @@ export default function DashboardPage() {
       >
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Good morning, Dr. Kim 👋
+            Good morning, {displayName} 👋
           </Typography>
           <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
             Here&apos;s your clinic&apos;s live rehabilitation overview
@@ -56,7 +80,7 @@ export default function DashboardPage() {
         <Stack direction="row" spacing={1}>
           <Chip
             icon={<FiberManualRecord sx={{ fontSize: 12, color: "#10d97e !important" }} />}
-            label="6 patients live"
+            label={mode === "demo" ? "6 patients live" : "Real database"}
             sx={{ background: "rgba(16,217,126,0.1)", border: "1px solid rgba(16,217,126,0.3)", color: "#10d97e", fontWeight: 700 }}
           />
           <Chip
@@ -72,7 +96,7 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
             title="Active Patients"
-            value="48"
+            value={String(kpi.active_patients)}
             delta="+12%"
             trend="up"
             icon={<People sx={{ fontSize: 28 }} />}
@@ -83,7 +107,7 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
             title="Live Sessions"
-            value="6"
+            value={String(kpi.sessions_today)}
             delta="+2"
             trend="up"
             icon={<MonitorHeart sx={{ fontSize: 28 }} />}
@@ -94,7 +118,7 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
             title="Alerts"
-            value="3"
+            value={String(Math.round(kpi.alert_rate * 100))}
             delta="-1"
             trend="down"
             icon={<Warning sx={{ fontSize: 28 }} />}
@@ -105,7 +129,7 @@ export default function DashboardPage() {
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
             title="Avg Adherence"
-            value="92%"
+            value={`${Math.round(kpi.avg_quality)}%`}
             delta="+5%"
             trend="up"
             icon={<HealthAndSafety sx={{ fontSize: 28 }} />}

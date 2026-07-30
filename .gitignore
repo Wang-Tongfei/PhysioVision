@@ -39,6 +39,7 @@ _t_*.html
 tsc_out.txt
 project_tree.txt
 .checkpoint/
+PhysioVision-final-*.zip
 
 # os
 .DS_Store

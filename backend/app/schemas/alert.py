@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
@@ -14,4 +15,4 @@ class AlertOut(BaseModel):
     score: Optional[float] = None
     evidence_clip_url: Optional[str] = None
     acknowledged: bool = False
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None

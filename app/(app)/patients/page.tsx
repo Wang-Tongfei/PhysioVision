@@ -1,25 +1,66 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Box, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+import { Box, CircularProgress, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
 import { Search, PersonAdd, EmojiEvents, LocalHospital, People } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import EChart from "@/components/charts/EChart";
 import { lineOption } from "@/components/charts/chartOptions";
 import { patients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { api } from "@/lib/api";
+import { useDataMode } from "@/lib/dataMode";
+
+type PatientRecord = (typeof patients)[number];
+type ApiPatient = {
+  id: number;
+  mrn: string;
+  full_name: string;
+  date_of_birth?: string | null;
+  diagnosis?: string | null;
+  risk_tier: string;
+};
+
+function fromApi(patient: ApiPatient): PatientRecord {
+  const birth = patient.date_of_birth ? new Date(patient.date_of_birth) : null;
+  const age = birth ? Math.max(0, new Date().getFullYear() - birth.getUTCFullYear()) : 0;
+  return {
+    id: patient.id,
+    name: patient.full_name,
+    mrn: patient.mrn,
+    age,
+    diagnosis: patient.diagnosis || "Assessment pending",
+    risk: `${patient.risk_tier.charAt(0).toUpperCase()}${patient.risk_tier.slice(1)}`,
+    score: 0,
+    adherence: 0,
+    last: "No sessions",
+    trend: [0, 0, 0, 0, 0, 0],
+  };
+}
 
 const riskColor: Record<string, string> = {
   Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
 };
 
 export default function PatientsPage() {
-  const [records, setRecords] = usePersistentState("physiovision.patients", patients);
+  const [demoRecords, setDemoRecords] = usePersistentState("physiovision.patients", patients);
+  const [liveRecords, setLiveRecords] = useState<PatientRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { mode } = useDataMode();
+  const records = mode === "demo" ? demoRecords : liveRecords;
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<(typeof patients)[number] | null>(null);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ name: "", mrn: "", age: "40", diagnosis: "", risk: "Low" });
+  useEffect(() => {
+    if (mode !== "live") return;
+    setLoading(true);
+    api<ApiPatient[]>("/patients")
+      .then((items) => setLiveRecords(items.map(fromApi)))
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Could not load real patient data."))
+      .finally(() => setLoading(false));
+  }, [mode]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle
@@ -27,7 +68,7 @@ export default function PatientsPage() {
       : records;
   }, [query, records]);
 
-  const addPatient = () => {
+  const addPatient = async () => {
     if (!form.name.trim() || !form.mrn.trim()) {
       setMessage("Name and MRN are required.");
       return;
@@ -48,7 +89,30 @@ export default function PatientsPage() {
       last: "New",
       trend: [0, 0, 0, 0, 0, 0],
     };
-    setRecords((current) => [next, ...current]);
+    if (mode === "live") {
+      setLoading(true);
+      try {
+        const birthYear = new Date().getFullYear() - next.age;
+        const created = await api<ApiPatient>("/patients", {
+          method: "POST",
+          body: JSON.stringify({
+            mrn: next.mrn,
+            full_name: next.name,
+            date_of_birth: `${birthYear}-01-01`,
+            diagnosis: next.diagnosis,
+            risk_tier: next.risk.toLowerCase(),
+          }),
+        });
+        setLiveRecords((current) => [fromApi(created), ...current]);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not save the patient.");
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    } else {
+      setDemoRecords((current) => [next, ...current]);
+    }
     setAddOpen(false);
     setForm({ name: "", mrn: "", age: "40", diagnosis: "", risk: "Low" });
     setMessage(`${next.name} was added.`);
@@ -62,7 +126,7 @@ export default function PatientsPage() {
             Patients
           </Typography>
           <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            {records.length} active patients under your care
+            {records.length} active patients under your care · {mode === "demo" ? "demo dataset" : "database records"}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
@@ -81,13 +145,16 @@ export default function PatientsPage() {
             }}
             InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" sx={{ color: "text.secondary" }} /></InputAdornment>) }}
           />
-          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setAddOpen(true)}>Add Patient</Button>
+          <Button disabled={loading} variant="contained" startIcon={<PersonAdd />} onClick={() => setAddOpen(true)}>Add Patient</Button>
         </Stack>
       </Stack>
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} lg={8}>
           <Grid container spacing={2.5}>
+            {loading && records.length === 0 && (
+              <Grid item xs={12}><Box sx={{ py: 8, display: "grid", placeItems: "center" }}><CircularProgress /></Box></Grid>
+            )}
             {visible.map((p) => (
               <Grid item xs={12} md={6} key={p.id}>
                 <Box onClick={() => setSelected(p)} sx={{ cursor: "pointer" }}>
@@ -124,7 +191,13 @@ export default function PatientsPage() {
             ))}
             {visible.length === 0 && (
               <Grid item xs={12}>
-                <Alert severity="info">No patients match “{query}”.</Alert>
+                <Alert severity="info">
+                  {query
+                    ? `No patients match “${query}”.`
+                    : mode === "live"
+                    ? "No real patient records yet. Add the first patient or switch to Demo."
+                    : "No demo patients."}
+                </Alert>
               </Grid>
             )}
           </Grid>

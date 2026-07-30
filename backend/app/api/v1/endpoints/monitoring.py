@@ -2,7 +2,7 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.services.monitor_engine import (
@@ -37,6 +37,30 @@ def start_live_monitor(
         return monitor_engine.start_camera(exercise, camera_index, track_arm)
     except (RuntimeError, ValueError) as exc:
         raise _start_error(exc) from exc
+
+
+@router.websocket("/monitor/browser")
+async def browser_camera_monitor(
+    websocket: WebSocket,
+    exercise: str = "bicep_curl",
+    track_arm: str = "right",
+):
+    await websocket.accept()
+    started = False
+    try:
+        monitor_engine.start_browser(exercise, track_arm)
+        started = True
+        while True:
+            frame = await websocket.receive_bytes()
+            if len(frame) <= 2 * 1024 * 1024:
+                monitor_engine.push_browser_frame(frame)
+    except WebSocketDisconnect:
+        pass
+    except (RuntimeError, ValueError) as exc:
+        await websocket.send_json({"error": str(exc)})
+    finally:
+        if started:
+            monitor_engine.stop()
 
 
 @router.post("/monitor/upload", status_code=202)

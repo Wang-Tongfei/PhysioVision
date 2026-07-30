@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent,
   DialogTitle, Grid, MenuItem, Snackbar, Stack, TextField, Typography,
@@ -9,6 +9,8 @@ import { Add, Assignment, FitnessCenter, PlayCircle } from "@mui/icons-material"
 import SectionCard from "@/components/common/SectionCard";
 import { patients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { api } from "@/lib/api";
+import { useDataMode } from "@/lib/dataMode";
 
 const seedExercises = [
   { id: 1, name: "Knee Flexion AROM", protocol: "ACL Rehab", sets: 3, reps: 12, focus: "Mobility", color: "#f0b84b", instructions: "Slow controlled flexion through a pain-free range." },
@@ -19,16 +21,60 @@ const seedExercises = [
   { id: 6, name: "Step-Ups", protocol: "Knee OA", sets: 3, reps: 10, focus: "Function", color: "#c76445", instructions: "Keep the knee aligned over the second toe." },
 ];
 
+type ExerciseRecord = (typeof seedExercises)[number];
+type ApiExercise = {
+  id: number;
+  code: string;
+  name: string;
+  category?: string | null;
+  default_reps: number;
+  default_sets: number;
+  instructions?: string | null;
+};
+type PatientChoice = { id: number; name: string; mrn: string };
+
+function exerciseFromApi(item: ApiExercise): ExerciseRecord {
+  return {
+    id: item.id,
+    name: item.name,
+    protocol: item.code,
+    sets: item.default_sets,
+    reps: item.default_reps,
+    focus: item.category || "General",
+    color: "#22d3ee",
+    instructions: item.instructions || "Follow the therapist's prescribed technique.",
+  };
+}
+
 export default function ExercisesPage() {
-  const [exercises, setExercises] = usePersistentState("physiovision.exercises", seedExercises);
+  const [demoExercises, setDemoExercises] = usePersistentState("physiovision.exercises", seedExercises);
+  const [liveExercises, setLiveExercises] = useState<ExerciseRecord[]>([]);
+  const [livePatients, setLivePatients] = useState<PatientChoice[]>([]);
+  const { mode } = useDataMode();
+  const exercises = mode === "demo" ? demoExercises : liveExercises;
+  const patientChoices = mode === "demo" ? patients : livePatients;
   const [newOpen, setNewOpen] = useState(false);
   const [demo, setDemo] = useState<(typeof seedExercises)[number] | null>(null);
   const [prescribe, setPrescribe] = useState<(typeof seedExercises)[number] | null>(null);
   const [patientId, setPatientId] = useState(String(patients[0].id));
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ name: "", protocol: "", sets: "3", reps: "10", focus: "Strength", instructions: "" });
+  useEffect(() => {
+    if (mode !== "live") return;
+    Promise.all([
+      api<ApiExercise[]>("/exercises"),
+      api<Array<{ id: number; full_name: string; mrn: string }>>("/patients"),
+    ])
+      .then(([exerciseItems, patientItems]) => {
+        setLiveExercises(exerciseItems.map(exerciseFromApi));
+        const choices = patientItems.map((item) => ({ id: item.id, name: item.full_name, mrn: item.mrn }));
+        setLivePatients(choices);
+        if (choices[0]) setPatientId(String(choices[0].id));
+      })
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Could not load real data."));
+  }, [mode]);
 
-  const createExercise = () => {
+  const createExercise = async () => {
     if (!form.name.trim() || !form.protocol.trim()) {
       setMessage("Exercise name and protocol are required.");
       return;
@@ -43,20 +89,62 @@ export default function ExercisesPage() {
       instructions: form.instructions.trim() || "Follow the therapist's prescribed technique.",
       color: "#22d3ee",
     };
-    setExercises((current) => [...current, next]);
+    if (mode === "live") {
+      try {
+        const created = await api<ApiExercise>("/exercises", {
+          method: "POST",
+          body: JSON.stringify({
+            code: next.protocol.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_"),
+            name: next.name,
+            category: next.focus,
+            default_sets: next.sets,
+            default_reps: next.reps,
+            instructions: next.instructions,
+          }),
+        });
+        setLiveExercises((current) => [...current, exerciseFromApi(created)]);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not create the exercise.");
+        return;
+      }
+    } else {
+      setDemoExercises((current) => [...current, next]);
+    }
     setNewOpen(false);
     setForm({ name: "", protocol: "", sets: "3", reps: "10", focus: "Strength", instructions: "" });
     setMessage(`${next.name} was added to the library.`);
   };
 
-  const savePrescription = () => {
+  const savePrescription = async () => {
     if (!prescribe) return;
-    const patient = patients.find((item) => item.id === Number(patientId));
-    const saved = JSON.parse(localStorage.getItem("physiovision.prescriptions") || "[]");
-    localStorage.setItem("physiovision.prescriptions", JSON.stringify([
-      ...saved,
-      { id: Date.now(), patientId: Number(patientId), exerciseId: prescribe.id, createdAt: new Date().toISOString() },
-    ]));
+    const patient = patientChoices.find((item) => item.id === Number(patientId));
+    if (!patient) {
+      setMessage("Add a real patient before creating a prescription.");
+      return;
+    }
+    if (mode === "live") {
+      try {
+        await api("/exercises/prescriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            patient_id: Number(patientId),
+            exercise_id: prescribe.id,
+            reps: prescribe.reps,
+            sets: prescribe.sets,
+            frequency_per_week: 3,
+          }),
+        });
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not save the prescription.");
+        return;
+      }
+    } else {
+      const saved = JSON.parse(localStorage.getItem("physiovision.prescriptions") || "[]");
+      localStorage.setItem("physiovision.prescriptions", JSON.stringify([
+        ...saved,
+        { id: Date.now(), patientId: Number(patientId), exerciseId: prescribe.id, createdAt: new Date().toISOString() },
+      ]));
+    }
     setPrescribe(null);
     setMessage(`${prescribe.name} prescribed to ${patient?.name}.`);
   };
@@ -66,7 +154,7 @@ export default function ExercisesPage() {
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>Exercise Library</Typography>
-          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>{exercises.length} protocols · prescribed & tracked via pose AI</Typography>
+          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>{exercises.length} protocols · {mode === "demo" ? "demo dataset" : "database records"}</Typography>
         </Box>
         <Button variant="contained" startIcon={<Add />} onClick={() => setNewOpen(true)}>New Exercise</Button>
       </Stack>
@@ -133,7 +221,7 @@ export default function ExercisesPage() {
         <DialogTitle>Prescribe {prescribe?.name}</DialogTitle>
         <DialogContent>
           <TextField select fullWidth label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} sx={{ mt: 1 }}>
-            {patients.map((patient) => <MenuItem key={patient.id} value={String(patient.id)}>{patient.name} · {patient.mrn}</MenuItem>)}
+            {patientChoices.map((patient) => <MenuItem key={patient.id} value={String(patient.id)}>{patient.name} · {patient.mrn}</MenuItem>)}
           </TextField>
           <Typography color="text.secondary" mt={2}>{prescribe?.sets} sets × {prescribe?.reps} reps/seconds</Typography>
         </DialogContent>

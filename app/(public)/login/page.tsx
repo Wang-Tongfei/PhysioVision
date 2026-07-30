@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,16 +29,45 @@ import {
   Google,
   GitHub,
 } from "@mui/icons-material";
+import {
+  api,
+  getRecentLogin,
+  oauthUrl,
+  saveRecentLogin,
+  saveSession,
+  Session,
+} from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPw, setShowPw] = useState(false);
-  const [email, setEmail] = useState("therapist@clinic.com");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [demoEntry, setDemoEntry] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [messageType, setMessageType] = useState<"success" | "error">("error");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const isDemo =
+      new URLSearchParams(window.location.search).get("demo") === "1";
+    const isRelogin =
+      new URLSearchParams(window.location.search).get("relogin") === "1";
+    setDemoEntry(isDemo);
+    if (isDemo) {
+      setEmail("therapist@clinic.com");
+      setPassword("demo1234");
+    } else if (isRelogin) {
+      const recentLogin = getRecentLogin();
+      if (recentLogin) {
+        setEmail(recentLogin.email);
+        setPassword(recentLogin.password);
+      }
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setMessage("Enter a valid email address.");
@@ -48,8 +77,45 @@ export default function LoginPage() {
       setMessage("Password must contain at least 6 characters.");
       return;
     }
-    localStorage.setItem("physiovision.session", JSON.stringify({ email, signedInAt: new Date().toISOString() }));
-    router.push("/dashboard");
+    setLoading(true);
+    try {
+      const session = await api<Session>(
+        "/auth/login",
+        { method: "POST", body: JSON.stringify({ email, password }) },
+        false
+      );
+      saveSession(session);
+      saveRecentLogin(email, password);
+      router.push("/dashboard");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Sign in failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendReset = async () => {
+    setLoading(true);
+    try {
+      const result = await api<{ message: string; delivery: string }>(
+        "/auth/forgot-password",
+        { method: "POST", body: JSON.stringify({ email }) },
+        false
+      );
+      setForgotOpen(false);
+      setMessageType(result.delivery === "development" ? "error" : "success");
+      setMessage(
+        result.delivery === "development"
+          ? "Reset link created, but SMTP is not configured. Check the API log for the local link."
+          : result.message
+      );
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Could not send reset instructions.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -211,8 +277,8 @@ export default function LoginPage() {
               </Button>
             </Box>
 
-            <Button type="submit" variant="contained" sx={{ width: "100%", py: 1.4, fontSize: 15 }}>
-              Sign In
+            <Button disabled={loading} type="submit" variant="contained" sx={{ width: "100%", py: 1.4, fontSize: 15 }}>
+              {loading ? "Signing in…" : "Sign In"}
             </Button>
           </form>
 
@@ -223,7 +289,7 @@ export default function LoginPage() {
               fullWidth
               className="btn-ghost"
               startIcon={<Google />}
-              onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "Google" })); router.push("/dashboard"); }}
+              onClick={() => { window.location.href = oauthUrl("google"); }}
             >
               Google
             </Button>
@@ -231,15 +297,17 @@ export default function LoginPage() {
               fullWidth
               className="btn-ghost"
               startIcon={<GitHub />}
-              onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "GitHub" })); router.push("/dashboard"); }}
+              onClick={() => { window.location.href = oauthUrl("github"); }}
             >
               GitHub
             </Button>
           </Box>
 
+          {demoEntry && (
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 2, textAlign: "center" }}>
             Demo credentials are prefilled — just click Sign In.
           </Typography>
+          )}
         </Box>
       </Box>
 
@@ -251,11 +319,11 @@ export default function LoginPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setForgotOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => { setForgotOpen(false); setMessage("Password reset instructions sent."); }}>Send instructions</Button>
+          <Button disabled={loading} variant="contained" onClick={sendReset}>Send instructions</Button>
         </DialogActions>
       </Dialog>
       <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
-        <Alert severity={message.includes("sent") ? "success" : "error"} onClose={() => setMessage("")}>{message}</Alert>
+        <Alert severity={messageType} onClose={() => setMessage("")}>{message}</Alert>
       </Snackbar>
     </Box>
   );

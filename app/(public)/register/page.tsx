@@ -30,6 +30,7 @@ import {
   GitHub,
   CheckCircle,
 } from "@mui/icons-material";
+import { api, oauthUrl, saveRecentLogin, saveSession, Session } from "@/lib/api";
 
 const plans = [
   "Solo Therapist",
@@ -43,6 +44,7 @@ export default function RegisterPage() {
   const [showPw2, setShowPw2] = useState(false);
   const [agreed, setAgreed] = useState(true);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -54,7 +56,7 @@ export default function RegisterPage() {
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.clinic.trim()) {
       setMessage("Name and clinic are required.");
@@ -76,9 +78,30 @@ export default function RegisterPage() {
       setMessage("Accept the Terms and Privacy Policy to continue.");
       return;
     }
-    localStorage.setItem("physiovision.account", JSON.stringify({ name: form.name, email: form.email, clinic: form.clinic, plan: form.plan }));
-    localStorage.setItem("physiovision.session", JSON.stringify({ email: form.email, signedInAt: new Date().toISOString() }));
-    router.push("/dashboard");
+    setLoading(true);
+    try {
+      const session = await api<Session>(
+        "/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            full_name: form.name,
+            email: form.email,
+            clinic_name: form.clinic,
+            password: form.password,
+            plan: form.plan,
+          }),
+        },
+        false
+      );
+      saveSession(session);
+      saveRecentLogin(form.email, form.password);
+      router.push("/dashboard");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Account creation failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const benefits = [
@@ -267,18 +290,18 @@ export default function RegisterPage() {
               }
             />
 
-            <Button type="submit" variant="contained" sx={{ width: "100%", py: 1.4, fontSize: 15, mt: 1 }}>
-              Create Account
+            <Button disabled={loading} type="submit" variant="contained" sx={{ width: "100%", py: 1.4, fontSize: 15, mt: 1 }}>
+              {loading ? "Creating account…" : "Create Account"}
             </Button>
           </form>
 
           <Divider sx={{ my: 2, color: "text.secondary" }}>or sign up with</Divider>
 
           <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Button fullWidth className="btn-ghost" startIcon={<Google />} onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "Google" })); router.push("/dashboard"); }}>
+            <Button fullWidth className="btn-ghost" startIcon={<Google />} onClick={() => { window.location.href = oauthUrl("google"); }}>
               Google
             </Button>
-            <Button fullWidth className="btn-ghost" startIcon={<GitHub />} onClick={() => { localStorage.setItem("physiovision.session", JSON.stringify({ provider: "GitHub" })); router.push("/dashboard"); }}>
+            <Button fullWidth className="btn-ghost" startIcon={<GitHub />} onClick={() => { window.location.href = oauthUrl("github"); }}>
               GitHub
             </Button>
           </Box>

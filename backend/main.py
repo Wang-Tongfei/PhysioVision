@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
-from app.models import Clinic, Subscription  # Imports all models into metadata.
+from app.models import Clinic, Subscription, User  # Imports all models into metadata.
+from app.core.security import hash_password
 
 
 @asynccontextmanager
@@ -42,6 +43,16 @@ async def lifespan(app: FastAPI):
                     max_patients=200,
                     max_edge_nodes=10,
                     active=True,
+                )
+            )
+        if db.query(User).filter(User.email == "therapist@clinic.com").first() is None:
+            db.add(
+                User(
+                    clinic_id=1,
+                    full_name="Dr. Sarah Kim",
+                    email="therapist@clinic.com",
+                    password_hash=hash_password("demo1234"),
+                    role="lead_therapist",
                 )
             )
         db.commit()

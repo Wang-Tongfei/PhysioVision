@@ -6,10 +6,19 @@ import SectionCard from "@/components/common/SectionCard";
 import { ShowChart, BarChart } from "@mui/icons-material";
 import { lineOption, barOption } from "@/components/charts/chartOptions";
 import { recoveryTrend, clinicAnalytics } from "@/lib/mockData";
+import { useDataMode } from "@/lib/dataMode";
 
 export default function HistoricalTrends() {
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
+  const { mode } = useDataMode();
+  if (mode === "live") {
+    return (
+      <SectionCard title="Recovery Trends" subtitle="Database sessions" icon={<ShowChart />}>
+        <Typography color="text.secondary">Recovery charts will appear after real rehabilitation sessions have been recorded. Demo trends are hidden in Real data mode.</Typography>
+      </SectionCard>
+    );
+  }
 
   return (
     <SectionCard title="Recovery Trends" subtitle="Last 7 sessions" icon={<ShowChart />}>

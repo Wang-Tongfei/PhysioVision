@@ -34,6 +34,8 @@ import {
 import SkeletonOverlay from "./SkeletonOverlay";
 import { livePatients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { useDataMode } from "@/lib/dataMode";
+import { getSession } from "@/lib/api";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -57,7 +59,7 @@ type MonitorPhase =
 interface MonitorStatus {
   job_id: string | null;
   phase: MonitorPhase;
-  source: "camera" | "upload" | null;
+  source: "browser" | "camera" | "upload" | null;
   source_label: string | null;
   exercise: string | null;
   progress: number;
@@ -102,7 +104,13 @@ async function apiRequest(path: string, init?: RequestInit) {
 }
 
 export default function LiveMonitor() {
+  const { mode } = useDataMode();
   const uploadInput = useRef<HTMLInputElement>(null);
+  const browserVideo = useRef<HTMLVideoElement>(null);
+  const browserCanvas = useRef<HTMLCanvasElement>(null);
+  const mediaStream = useRef<MediaStream | null>(null);
+  const cameraSocket = useRef<WebSocket | null>(null);
+  const captureTimer = useRef<number | null>(null);
   const [exercise, setExercise] = useState("bicep_curl");
   const [status, setStatus] = useState<MonitorStatus>(IDLE_STATUS);
   const [busy, setBusy] = useState(false);
@@ -110,6 +118,7 @@ export default function LiveMonitor() {
   const [streamKey, setStreamKey] = useState(0);
   const [cameraConfirmOpen, setCameraConfirmOpen] = useState(false);
   const [cameraErrorDismissed, setCameraErrorDismissed] = useState(false);
+  const [browserCameraActive, setBrowserCameraActive] = useState(false);
   const [dismissedResultJob, setDismissedResultJob, dismissalReady] =
     usePersistentState<string | null>(
       "physiovision.dismissedMonitorResultJob",
@@ -135,22 +144,86 @@ export default function LiveMonitor() {
     return () => window.clearInterval(timer);
   }, [refreshStatus]);
 
+  const releaseBrowserCamera = useCallback(() => {
+    if (captureTimer.current !== null) {
+      window.clearInterval(captureTimer.current);
+      captureTimer.current = null;
+    }
+    cameraSocket.current?.close();
+    cameraSocket.current = null;
+    mediaStream.current?.getTracks().forEach((track) => track.stop());
+    mediaStream.current = null;
+    if (browserVideo.current) browserVideo.current.srcObject = null;
+    setBrowserCameraActive(false);
+  }, []);
+
+  useEffect(() => releaseBrowserCamera, [releaseBrowserCamera]);
+
   const startLive = async () => {
     setCameraConfirmOpen(false);
     setCameraErrorDismissed(false);
     setBusy(true);
     setConnectionError(null);
     try {
-      const next = await apiRequest(
-        `/sessions/monitor/live?exercise=${exercise}&camera_index=0`,
-        { method: "POST" }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("This browser does not support camera access");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user",
+        },
+        audio: false,
+      });
+      mediaStream.current = stream;
+      if (!browserVideo.current) throw new Error("Camera preview is unavailable");
+      browserVideo.current.srcObject = stream;
+      await browserVideo.current.play();
+
+      const query = new URLSearchParams({ exercise, track_arm: "right" });
+      const token = getSession()?.access_token;
+      if (token) query.set("token", token);
+      const socket = new WebSocket(
+        `${API_BASE.replace(/^http/, "ws")}/sessions/monitor/browser?${query}`
       );
-      setStatus(next);
+      cameraSocket.current = socket;
+      await new Promise<void>((resolve, reject) => {
+        socket.onopen = () => resolve();
+        socket.onerror = () => reject(new Error("Could not connect camera analysis"));
+      });
+      setBrowserCameraActive(true);
       setStreamKey((value) => value + 1);
+      captureTimer.current = window.setInterval(() => {
+        const video = browserVideo.current;
+        const canvas = browserCanvas.current;
+        if (
+          !video ||
+          !canvas ||
+          socket.readyState !== WebSocket.OPEN ||
+          socket.bufferedAmount > 2_000_000 ||
+          video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+        ) return;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob && socket.readyState === WebSocket.OPEN) socket.send(blob);
+          },
+          "image/jpeg",
+          0.75
+        );
+      }, 100);
     } catch (error) {
-      setConnectionError(
-        error instanceof Error ? error.message : "Could not start camera"
-      );
+      releaseBrowserCamera();
+      const message =
+        error instanceof DOMException && error.name === "NotAllowedError"
+          ? "Camera permission was denied. Allow camera access in the browser and try again"
+          : error instanceof DOMException && error.name === "NotFoundError"
+            ? "No camera was found by the browser"
+            : error instanceof Error ? error.message : "Could not start camera";
+      setConnectionError(message);
     } finally {
       setBusy(false);
     }
@@ -199,6 +272,7 @@ export default function LiveMonitor() {
 
   const stopMonitor = async () => {
     setBusy(true);
+    releaseBrowserCamera();
     try {
       setStatus(await apiRequest("/sessions/monitor/stop", { method: "POST" }));
     } catch (error) {
@@ -215,12 +289,12 @@ export default function LiveMonitor() {
     status.job_id !== null && dismissedResultJob === status.job_id;
   const showCameraSnapshot =
     dismissalReady &&
-    status.source === "camera" &&
+    ["browser", "camera"].includes(status.source ?? "") &&
     status.has_frame &&
     ["completed", "stopped"].includes(status.phase) &&
     !resultDismissed;
   const cameraInactive =
-    status.source === "camera" &&
+    ["browser", "camera"].includes(status.source ?? "") &&
     !active &&
     !showCameraSnapshot &&
     (status.phase !== "error" || cameraErrorDismissed);
@@ -363,6 +437,21 @@ export default function LiveMonitor() {
           justifyContent: "center",
         }}
       >
+        <Box
+          component="video"
+          ref={browserVideo}
+          muted
+          playsInline
+          autoPlay
+          sx={{
+            display: browserCameraActive && !showStream ? "block" : "none",
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            transform: "scaleX(-1)",
+          }}
+        />
+        <canvas ref={browserCanvas} hidden />
         {showResult ? (
           <Box
             component="video"
@@ -381,11 +470,11 @@ export default function LiveMonitor() {
             alt="Live patient movement with pose overlay"
             sx={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
-        ) : (
+        ) : !browserCameraActive ? (
           <Box sx={{ width: "52%", height: "88%", opacity: 0.8 }}>
             <SkeletonOverlay color="#22d3ee" />
           </Box>
-        )}
+        ) : null}
 
         {(showResult || showCameraSnapshot) && (
           <Button
@@ -436,7 +525,7 @@ export default function LiveMonitor() {
             active
               ? status.source === "upload"
                 ? "ANALYZING VIDEO"
-                : "LIVE · CAM-01"
+                : "LIVE · BROWSER CAMERA"
               : monitorIdleView
                 ? "IDLE"
                 : status.phase.toUpperCase()
@@ -498,7 +587,7 @@ export default function LiveMonitor() {
         sx={{ mt: 2, overflowX: "auto" }}
         className="scroll-y"
       >
-        {livePatients.map((patient) => (
+        {mode === "demo" ? livePatients.map((patient) => (
           <Box
             key={patient.id}
             sx={{
@@ -531,7 +620,22 @@ export default function LiveMonitor() {
               {patient.exercise}
             </Typography>
           </Box>
-        ))}
+        )) : (
+          <Box
+            sx={{
+              width: "100%",
+              borderRadius: "12px",
+              p: 2,
+              textAlign: "center",
+              background: "rgba(11,30,51,0.35)",
+              border: "1px dashed rgba(148,163,184,0.25)",
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              No active patient stations.
+            </Typography>
+          </Box>
+        )}
       </Stack>
 
       <Dialog
@@ -543,8 +647,9 @@ export default function LiveMonitor() {
         <DialogTitle>Start live camera?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            PhysioVision will use the camera connected to this computer for
-            live movement analysis. No camera will be opened until you confirm.
+            Your browser will ask for camera permission. Frames are sent to the
+            existing Python pose-analysis service, and the camera is released
+            when you stop the session.
           </Typography>
         </DialogContent>
         <DialogActions>

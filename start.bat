@@ -19,7 +19,7 @@ if not exist "node_modules\" (
 
 if exist "backend\.venv\Scripts\python.exe" (
     echo Starting PhysioVision API at http://localhost:8000
-    start "PhysioVision API" /min cmd /k ""%CD%\backend\.venv\Scripts\python.exe" -m uvicorn main:app --app-dir backend --host 0.0.0.0 --port 8000"
+    start "PhysioVision API" /min cmd /k ""%CD%\backend\.venv\Scripts\python.exe" -m uvicorn main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload"
 ) else (
     echo [WARNING] backend\.venv is missing. Live camera and video upload will be unavailable.
     echo Create it and install backend\requirements.txt to enable vision features.

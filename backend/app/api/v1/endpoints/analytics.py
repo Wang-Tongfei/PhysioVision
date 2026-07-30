@@ -7,12 +7,28 @@ from app.core.database import get_db
 from app.models.session import RehabSession
 from app.models.patient import Patient
 from app.agents.analytics_agent import recovery_trend
+from app.models.user import User
+from app.api.v1.endpoints.auth import current_user
+from sqlalchemy import func
 
 router = APIRouter()
 
 
 @router.get("/patient/{patient_id}/trend")
-def patient_trend(patient_id: int, days: int = 30, db: Session = Depends(get_db)):
+def patient_trend(
+    patient_id: int,
+    days: int = 30,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    patient = (
+        db.query(Patient)
+        .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
+        .first()
+    )
+    if not patient:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Patient not found")
     since = datetime.now(timezone.utc) - timedelta(days=days)
     rows = (
         db.query(RehabSession)
@@ -31,16 +47,28 @@ def patient_trend(patient_id: int, days: int = 30, db: Session = Depends(get_db)
 
 
 @router.get("/clinic/kpi")
-def clinic_kpi(db: Session = Depends(get_db)):
-    active_patients = db.query(Patient).count()
+def clinic_kpi(
+    db: Session = Depends(get_db), user: User = Depends(current_user)
+):
+    active_patients = (
+        db.query(Patient).filter(Patient.clinic_id == user.clinic_id).count()
+    )
     sessions_today = (
         db.query(RehabSession)
+        .join(Patient, Patient.id == RehabSession.patient_id)
+        .filter(Patient.clinic_id == user.clinic_id)
         .filter(RehabSession.started_at >= datetime.now(timezone.utc).date())
         .count()
+    )
+    avg_quality = (
+        db.query(func.avg(RehabSession.movement_quality_score))
+        .join(Patient, Patient.id == RehabSession.patient_id)
+        .filter(Patient.clinic_id == user.clinic_id)
+        .scalar()
     )
     return {
         "active_patients": active_patients,
         "sessions_today": sessions_today,
-        "avg_quality": 82.4,
-        "alert_rate": 0.06,
+        "avg_quality": round(float(avg_quality or 0), 1),
+        "alert_rate": 0.0,
     }

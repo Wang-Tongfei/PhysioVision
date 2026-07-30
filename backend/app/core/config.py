@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     # JWT auth placeholders (replace SECRET_KEY in production).
     SECRET_KEY: str = "change-me-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    FRONTEND_URL: str = "http://localhost:3000"
+    PUBLIC_API_URL: str = "http://localhost:8000"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@physiovision.local"
+    SMTP_USE_TLS: bool = True
 
     # Optional Telegram delivery for monitoring alerts and completion notices.
     PHYSIO_TG_TOKEN: str = ""

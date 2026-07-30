@@ -203,7 +203,7 @@ export default function LandingPage() {
             </Button>
             <Button
               component={Link}
-              href="/login"
+              href="/login?demo=1"
               className="btn-ghost"
               sx={{ py: 1.5, px: 4, fontSize: 16 }}
             >

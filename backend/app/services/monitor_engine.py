@@ -7,6 +7,7 @@ encoded for the browser, so the desktop and web views share one visual source.
 from __future__ import annotations
 
 import importlib
+import queue
 import sys
 import threading
 import time
@@ -24,6 +25,50 @@ UPLOAD_ROOT = DATA_ROOT / "uploads"
 OUTPUT_ROOT = DATA_ROOT / "processed"
 
 SUPPORTED_EXERCISES = {"bicep_curl", "squat", "plank", "pushup"}
+
+
+class BrowserFrameSource:
+    """Low-latency video source fed by JPEG WebSocket messages."""
+
+    def __init__(self, cv2, stop_event: threading.Event):
+        self.cv2 = cv2
+        self.stop_event = stop_event
+        self.frames: queue.Queue[bytes] = queue.Queue(maxsize=2)
+        self.fps = 10.0
+        self.width = 640
+        self.height = 480
+        self.label = "Browser camera"
+
+    def push(self, jpeg: bytes) -> None:
+        if self.stop_event.is_set():
+            return
+        if self.frames.full():
+            try:
+                self.frames.get_nowait()
+            except queue.Empty:
+                pass
+        try:
+            self.frames.put_nowait(jpeg)
+        except queue.Full:
+            pass
+
+    def read(self):
+        np = importlib.import_module("numpy")
+        while not self.stop_event.is_set():
+            try:
+                jpeg = self.frames.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            frame = self.cv2.imdecode(
+                np.frombuffer(jpeg, dtype=np.uint8), self.cv2.IMREAD_COLOR
+            )
+            if frame is not None:
+                self.height, self.width = frame.shape[:2]
+                return True, frame
+        return False, None
+
+    def release(self) -> None:
+        self.stop_event.set()
 
 
 def _load_bot_modules():
@@ -64,6 +109,7 @@ class MonitorEngine:
         self._thread: threading.Thread | None = None
         self._latest_jpeg: bytes | None = None
         self._result_path: Path | None = None
+        self._browser_source: BrowserFrameSource | None = None
         self._status = self._idle_status()
 
     @staticmethod
@@ -117,8 +163,21 @@ class MonitorEngine:
             track_arm=track_arm,
         )
 
+    def start_browser(self, exercise: str, track_arm: str = "right") -> dict:
+        return self._start(None, "browser", exercise, track_arm)
+
+    def push_browser_frame(self, jpeg: bytes) -> None:
+        with self._lock:
+            source = self._browser_source
+        if source is not None:
+            source.push(jpeg)
+
     def _start(
-        self, source: int | str, source_kind: str, exercise: str, track_arm: str
+        self,
+        source: int | str | None,
+        source_kind: str,
+        exercise: str,
+        track_arm: str,
     ) -> dict:
         if exercise not in SUPPORTED_EXERCISES:
             raise ValueError(f"Unsupported exercise: {exercise}")
@@ -183,7 +242,11 @@ class MonitorEngine:
                 break
 
     def _run(
-        self, source_value: int | str, source_kind: str, exercise: str, track_arm: str
+        self,
+        source_value: int | str | None,
+        source_kind: str,
+        exercise: str,
+        track_arm: str,
     ) -> None:
         source = pose = hand_pose = writer = None
         try:
@@ -196,7 +259,12 @@ class MonitorEngine:
             if not Path(cfg.model_path).is_file():
                 raise RuntimeError(f"Pose model was not found: {cfg.model_path}")
 
-            source = modules["VideoSource"].open(source_value, cfg.camera_index)
+            if source_kind == "browser":
+                source = BrowserFrameSource(cv2, self._stop_event)
+                with self._lock:
+                    self._browser_source = source
+            else:
+                source = modules["VideoSource"].open(source_value, cfg.camera_index)
             pose = modules["PoseEstimator"](cfg.model_path)
             if cfg.enable_hand_tracking and Path(cfg.hand_model_path).is_file():
                 hand_pose = modules["HandEstimator"](cfg.hand_model_path)
@@ -364,6 +432,8 @@ class MonitorEngine:
                 hand_pose.close()
             if source_kind == "upload":
                 Path(str(source_value)).unlink(missing_ok=True)
+            with self._lock:
+                self._browser_source = None
 
 
 monitor_engine = MonitorEngine()

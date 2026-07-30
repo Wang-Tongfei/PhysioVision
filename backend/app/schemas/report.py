@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
@@ -10,6 +11,10 @@ class SoapNoteIn(BaseModel):
     objective: str
     assessment: str
     plan: str
+    visit_datetime: Optional[datetime] = None
+    author: Optional[str] = None
+    signature: Optional[str] = None
+    authenticated_at: Optional[datetime] = None
 
 
 class SoapNoteOut(BaseModel):
@@ -22,7 +27,7 @@ class SoapNoteOut(BaseModel):
     progress_summary: Optional[str] = None
     ai_recommendations: Optional[list] = None
     generated_by: Optional[str] = None
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class ReportOut(SoapNoteOut):

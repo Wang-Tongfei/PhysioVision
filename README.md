@@ -137,6 +137,24 @@ PHYSIO_TG_CHAT=your-chat-id
 15 秒冷却时间，避免连续刷屏。未配置时通知功能静默关闭，不影响分析。
 修改配置后需要重启 FastAPI。
 
+## 真实账号、OAuth 与邮件
+
+应用支持数据库账号注册/登录、一次性密码重置链接，以及 Google/GitHub OAuth。本地仍保留
+`therapist@clinic.com` / `demo1234` 账号和原有 Demo 数据。登录后可在顶部切换
+**Demo** 与 **Real data**；患者、训练项目和处方在 Real data 模式下读写 SQLite。
+
+复制 `backend/.env.example` 为 `backend/.env`，并按需配置 Google、GitHub 与 SMTP
+参数。开发环境的 OAuth 回调地址分别为：
+
+- `http://localhost:8000/api/v1/auth/oauth/google/callback`
+- `http://localhost:8000/api/v1/auth/oauth/github/callback`
+
+未配置某个 OAuth 提供商时，对应入口会明确返回“未配置”，不会伪造登录成功。未配置 SMTP
+时，开发环境会把密码重置链接写入 API 日志，不会显示邮件已真实发送。
+
+完整的本地配置、OAuth、SMTP 和 Vercel/Render 部署步骤见
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
+
 ### 本地动作监测
 
 具体环境配置和快捷键见 `Physio_AI_Bot/README.md`。

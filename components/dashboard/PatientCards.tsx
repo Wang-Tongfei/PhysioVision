@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Box, Typography, Stack, Chip, LinearProgress, Avatar } from "@mui/material";
 import { Person, ChevronRight } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import { patients } from "@/lib/mockData";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+import { useDataMode } from "@/lib/dataMode";
 
 const riskColor: Record<string, string> = {
   Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
@@ -12,10 +15,32 @@ const riskColor: Record<string, string> = {
 
 export default function PatientCards() {
   const router = useRouter();
+  const { mode } = useDataMode();
+  const [records, setRecords] = useState(patients);
+  useEffect(() => {
+    if (mode === "demo") {
+      setRecords(patients);
+      return;
+    }
+    api<Array<{ id: number; full_name: string; mrn: string; diagnosis?: string; risk_tier: string }>>("/patients")
+      .then((items) => setRecords(items.slice(0, 6).map((item) => ({
+        id: item.id,
+        name: item.full_name,
+        mrn: item.mrn,
+        age: 0,
+        diagnosis: item.diagnosis || "Assessment pending",
+        risk: `${item.risk_tier.charAt(0).toUpperCase()}${item.risk_tier.slice(1)}`,
+        score: 0,
+        adherence: 0,
+        last: "No sessions",
+        trend: [0, 0, 0, 0, 0, 0],
+      }))))
+      .catch(() => setRecords([]));
+  }, [mode]);
   return (
-    <SectionCard title="Active Patients" subtitle={`${patients.length} in treatment`} icon={<Person />}>
+    <SectionCard title="Active Patients" subtitle={`${records.length} ${mode === "demo" ? "demo" : "database"} records`} icon={<Person />}>
       <Stack spacing={1.5}>
-        {patients.map((p) => (
+        {records.map((p) => (
           <Box
             key={p.id}
             onClick={() => router.push(`/patients?patient=${p.id}`)}

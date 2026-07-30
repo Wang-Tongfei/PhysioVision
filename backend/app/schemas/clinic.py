@@ -13,6 +13,13 @@ class ClinicOut(BaseModel):
     timezone: str = "Asia/Singapore"
 
 
+class ClinicUpdate(BaseModel):
+    name: str
+    timezone: str
+    fhir_endpoint: Optional[str] = None
+    hl7_endpoint: Optional[str] = None
+
+
 class SubscriptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

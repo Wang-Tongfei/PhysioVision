@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent,
   DialogTitle, FormControlLabel, Grid, MenuItem, Snackbar, Stack, TextField,
@@ -11,6 +11,8 @@ import SectionCard from "@/components/common/SectionCard";
 import GaugeRing from "@/components/common/GaugeRing";
 import { aiRecommendation, alerts, patients, reports as seedReports } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
+import { api } from "@/lib/api";
+import { useDataMode } from "@/lib/dataMode";
 
 const severityColor: Record<string, string> = { critical: "#ef5b5b", warning: "#f5b73b", info: "#22d3ee" };
 const DEFAULT_RECORDER = "Dr. Sarah Kim, PT";
@@ -31,6 +33,24 @@ interface SoapReport {
   signature?: string;
   authenticated?: boolean;
   authenticatedAt?: string;
+}
+
+interface ApiReport {
+  id: number;
+  patient_id: number;
+  title?: string;
+  soap: {
+    subjective?: string;
+    objective?: string;
+    assessment?: string;
+    plan?: string;
+    visit_datetime?: string;
+    author?: string;
+    signature?: string;
+    authenticated_at?: string;
+  };
+  generated_by?: string;
+  created_at?: string;
 }
 
 const localDateTime = () => {
@@ -62,7 +82,15 @@ const initialReports: SoapReport[] = seedReports.map((report) => ({
 }));
 
 export default function ReportsPage() {
-  const [reports, setReports] = usePersistentState<SoapReport[]>("physiovision.reports", initialReports);
+  const [demoReports, setDemoReports] = usePersistentState<SoapReport[]>("physiovision.reports", initialReports);
+  const [liveReports, setLiveReports] = useState<SoapReport[]>([]);
+  const [patientChoices, setPatientChoices] = useState(patients);
+  const { mode } = useDataMode();
+  const reports = mode === "demo" ? demoReports : liveReports;
+  const updateReports = (updater: (current: SoapReport[]) => SoapReport[]) => {
+    if (mode === "demo") setDemoReports(updater);
+    else setLiveReports(updater);
+  };
   const [soapOpen, setSoapOpen] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
   const [soap, setSoap] = useState(newSoapForm);
@@ -70,8 +98,56 @@ export default function ReportsPage() {
   const [signing, setSigning] = useState<SoapReport | null>(null);
   const [signer, setSigner] = useState(DEFAULT_RECORDER);
   const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (mode === "demo") {
+      setPatientChoices(patients);
+      return;
+    }
+    Promise.all([
+      api<Array<{ id: number; full_name: string; mrn: string; risk_tier: string }>>("/patients"),
+      api<ApiReport[]>("/reports"),
+    ])
+      .then(([patientRows, reportRows]) => {
+        const choices = patientRows.map((patient) => ({
+          id: patient.id,
+          name: patient.full_name,
+          mrn: patient.mrn,
+          age: 0,
+          diagnosis: "Database record",
+          risk: `${patient.risk_tier.charAt(0).toUpperCase()}${patient.risk_tier.slice(1)}`,
+          score: 0,
+          adherence: 0,
+          last: "Database",
+          trend: [0, 0, 0, 0, 0, 0],
+        }));
+        setPatientChoices(choices);
+        const names = new Map(choices.map((patient) => [patient.id, patient.name]));
+        setLiveReports(reportRows.map((report) => ({
+          id: report.id,
+          patient: names.get(report.patient_id) || `Patient ${report.patient_id}`,
+          date: (report.soap.visit_datetime || report.created_at || "").slice(0, 10),
+          type: report.generated_by === "therapist" ? "Manual" : "SOAP Auto",
+          quality: 0,
+          risk: "Unknown",
+          plan: report.soap.plan || "",
+          subjective: report.soap.subjective,
+          objective: report.soap.objective,
+          assessment: report.soap.assessment,
+          visitDateTime: report.soap.visit_datetime,
+          author: report.soap.author,
+          signature: report.soap.signature,
+          authenticated: Boolean(report.soap.authenticated_at),
+          authenticatedAt: report.soap.authenticated_at,
+        })));
+        if (choices[0]) {
+          setSoap((current) => ({ ...current, patient: choices[0].name }));
+          setAutoPatient(choices[0].name);
+        }
+      })
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Could not load real reports."));
+  }, [mode]);
 
-  const createSoap = () => {
+  const createSoap = async () => {
     if (!soap.subjective.trim() || !soap.objective.trim() || !soap.assessment.trim() || !soap.plan.trim()) {
       setMessage("Complete all SOAP sections before saving.");
       return;
@@ -84,9 +160,36 @@ export default function ReportsPage() {
       setMessage("Authenticate the note before saving.");
       return;
     }
-    const patient = patients.find((item) => item.name === soap.patient)!;
-    setReports((current) => [{
-      id: Math.max(0, ...current.map((item) => item.id)) + 1,
+    const patient = patientChoices.find((item) => item.name === soap.patient);
+    if (!patient) {
+      setMessage("Add a patient before saving a SOAP note.");
+      return;
+    }
+    let savedId = Math.max(0, ...reports.map((item) => item.id)) + 1;
+    if (mode === "live") {
+      try {
+        const saved = await api<ApiReport>("/reports/soap", {
+          method: "POST",
+          body: JSON.stringify({
+            patient_id: patient.id,
+            subjective: soap.subjective,
+            objective: soap.objective,
+            assessment: soap.assessment,
+            plan: soap.plan,
+            visit_datetime: new Date(soap.visitDateTime).toISOString(),
+            author: soap.author,
+            signature: soap.signature,
+            authenticated_at: new Date().toISOString(),
+          }),
+        });
+        savedId = saved.id;
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not save the SOAP note.");
+        return;
+      }
+    }
+    updateReports((current) => [{
+      id: savedId,
       patient: soap.patient,
       date: soap.visitDateTime.slice(0, 10),
       type: "Manual",
@@ -103,13 +206,13 @@ export default function ReportsPage() {
       authenticatedAt: new Date().toISOString(),
     }, ...current]);
     setSoapOpen(false);
-    setSoap(newSoapForm());
+    setSoap({ ...newSoapForm(), patient: patientChoices[0]?.name || "" });
     setMessage("SOAP note saved and authenticated.");
   };
 
   const generateReport = () => {
-    const patient = patients.find((item) => item.name === autoPatient)!;
-    setReports((current) => [{
+    const patient = patientChoices.find((item) => item.name === autoPatient)!;
+    updateReports((current) => [{
       id: Math.max(0, ...current.map((item) => item.id)) + 1,
       patient: patient.name,
       date: new Date().toISOString().slice(0, 10),
@@ -134,7 +237,7 @@ export default function ReportsPage() {
       return;
     }
     const signedAt = new Date().toISOString();
-    setReports((current) => current.map((report) =>
+    updateReports((current) => current.map((report) =>
       report.id === signing.id
         ? {
             ...report,
@@ -183,11 +286,11 @@ export default function ReportsPage() {
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>AI Reports & SOAP Notes</Typography>
-          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>Generated by SOAP Agent + therapist entries</Typography>
+          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>Generated by SOAP Agent + therapist entries · {mode === "demo" ? "demo dataset" : "database records"}</Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<NoteAdd />} onClick={() => setSoapOpen(true)} sx={{ borderColor: "rgba(34,211,238,0.35)", color: "#22d3ee" }}>New SOAP</Button>
-          <Button variant="contained" startIcon={<AutoAwesome />} onClick={() => setAutoOpen(true)}>Generate Auto Report</Button>
+          <Button disabled={patientChoices.length === 0} variant="outlined" startIcon={<NoteAdd />} onClick={() => setSoapOpen(true)} sx={{ borderColor: "rgba(34,211,238,0.35)", color: "#22d3ee" }}>New SOAP</Button>
+          <Button disabled={mode === "live"} variant="contained" startIcon={<AutoAwesome />} onClick={() => setAutoOpen(true)}>Generate Auto Report</Button>
         </Stack>
       </Stack>
 
@@ -271,7 +374,7 @@ export default function ReportsPage() {
         <DialogContent>
           <Stack spacing={2} mt={1}>
             <TextField select label="Patient" value={soap.patient} onChange={(e) => setSoap({ ...soap, patient: e.target.value })}>
-              {patients.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name}</MenuItem>)}
+              {patientChoices.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name}</MenuItem>)}
             </TextField>
             <TextField
               type="datetime-local"
@@ -311,7 +414,7 @@ export default function ReportsPage() {
         <DialogTitle>Generate auto report</DialogTitle>
         <DialogContent>
           <TextField select fullWidth label="Completed patient session" value={autoPatient} onChange={(e) => setAutoPatient(e.target.value)} sx={{ mt: 1 }}>
-            {patients.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name} · score {patient.score}</MenuItem>)}
+            {patientChoices.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name} · score {patient.score}</MenuItem>)}
           </TextField>
           <Alert severity="info" sx={{ mt: 2 }}>A draft will be generated from the latest movement score, adherence and risk data.</Alert>
         </DialogContent>
