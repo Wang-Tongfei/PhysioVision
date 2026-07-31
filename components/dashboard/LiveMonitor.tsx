@@ -172,14 +172,17 @@ export default function LiveMonitor() {
   }, []);
 
   useEffect(() => {
-    if (mode !== "live") {
+    const monitorActive = ["starting", "running", "stopping"].includes(
+      status.phase
+    );
+    if (mode !== "live" && !browserCameraActive && !busy && !monitorActive) {
       setStatus(IDLE_STATUS);
       return;
     }
     refreshStatus();
     const timer = window.setInterval(refreshStatus, 1500);
     return () => window.clearInterval(timer);
-  }, [mode, refreshStatus]);
+  }, [browserCameraActive, busy, mode, refreshStatus, status.phase]);
 
   useEffect(() => {
     if (mode !== "live") {
@@ -215,6 +218,21 @@ export default function LiveMonitor() {
 
   useEffect(() => releaseBrowserCamera, [releaseBrowserCamera]);
 
+  useEffect(() => {
+    if (
+      browserCameraActive &&
+      status.job_id &&
+      ["completed", "stopped", "error"].includes(status.phase)
+    ) {
+      releaseBrowserCamera();
+    }
+  }, [
+    browserCameraActive,
+    releaseBrowserCamera,
+    status.job_id,
+    status.phase,
+  ]);
+
   const startLive = async () => {
     setCameraConfirmOpen(false);
     setCameraErrorDismissed(false);
@@ -249,6 +267,17 @@ export default function LiveMonitor() {
         socket.onopen = () => resolve();
         socket.onerror = () => reject(new Error("Could not connect camera analysis"));
       });
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data));
+          if (payload?.error) {
+            setConnectionError(payload.error);
+            releaseBrowserCamera();
+          }
+        } catch {
+          // Binary camera frames are sent by the client; server messages are JSON.
+        }
+      };
       setBrowserCameraActive(true);
       setStreamKey((value) => value + 1);
       captureTimer.current = window.setInterval(() => {

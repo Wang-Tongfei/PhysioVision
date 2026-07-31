@@ -135,6 +135,7 @@ async def browser_camera_monitor(
     except Exception as exc:
         if websocket.client_state.name == "CONNECTED":
             await websocket.send_json({"error": str(exc)})
+            await websocket.close(code=4409)
         else:
             await websocket.close(code=4401)
     finally:
