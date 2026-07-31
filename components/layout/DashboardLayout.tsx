@@ -41,6 +41,7 @@ import {
 import { usePersistentState } from "@/lib/usePersistentState";
 import { api, clearSession, getSession, SessionUser } from "@/lib/api";
 import { DataModeProvider, useDataMode } from "@/lib/dataMode";
+import { DEMO_PATIENTS_KEY } from "@/lib/mockData";
 
 const navItems = [
   { text: "Dashboard", icon: <DashboardIcon />, href: "/dashboard" },
@@ -62,7 +63,7 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
     if (mode === "demo") {
       const loadDemoCount = () => {
         try {
-          const saved = window.localStorage.getItem("physiovision.patients");
+          const saved = window.localStorage.getItem(DEMO_PATIENTS_KEY);
           setPatientCount(saved ? JSON.parse(saved).length : 6);
         } catch {
           setPatientCount(6);
@@ -125,7 +126,9 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
       >
         <LiveIcon sx={{ color: "#10d97e", fontSize: 12 }} className="pulse-dot" />
         <Typography variant="caption" sx={{ color: "#10d97e", fontWeight: 700 }}>
-          {patientCount} {patientCount === 1 ? "PATIENT" : "PATIENTS"} LIVE
+          {mode === "demo"
+            ? `${patientCount} DEMO ${patientCount === 1 ? "PATIENT" : "PATIENTS"}`
+            : `${patientCount} ${patientCount === 1 ? "PATIENT" : "PATIENTS"} LIVE`}
         </Typography>
       </Box>
 

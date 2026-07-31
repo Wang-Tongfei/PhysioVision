@@ -1,5 +1,7 @@
 // Mock data mirroring the PhysioVision backend API responses.
 
+export const DEMO_PATIENTS_KEY = "physiovision.demoPatients.v2";
+
 export const livePatients = [
   { id: 1, name: "Lim Wei Jie", station: "A1", exercise: "Knee Extension", color: "#00bcd4", status: "active" },
   { id: 2, name: "Tan Mei Ling", station: "A2", exercise: "Shoulder Flex", color: "#2dd4bf", status: "active" },

@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Box, CircularProgress, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
-import { DeleteOutline, Search, PersonAdd, EmojiEvents, LocalHospital, People } from "@mui/icons-material";
+import { DeleteOutline, Search, PersonAdd, EmojiEvents, LocalHospital, People, RestartAlt } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import EChart from "@/components/charts/EChart";
 import { lineOption } from "@/components/charts/chartOptions";
-import { patients } from "@/lib/mockData";
+import { DEMO_PATIENTS_KEY, patients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { api } from "@/lib/api";
 import { useDataMode } from "@/lib/dataMode";
@@ -43,7 +43,7 @@ const riskColor: Record<string, string> = {
 };
 
 export default function PatientsPage() {
-  const [demoRecords, setDemoRecords] = usePersistentState("physiovision.patients", patients);
+  const [demoRecords, setDemoRecords] = usePersistentState(DEMO_PATIENTS_KEY, patients);
   const [liveRecords, setLiveRecords] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const { mode } = useDataMode();
@@ -147,6 +147,18 @@ export default function PatientsPage() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          {mode === "demo" && (
+            <Button
+              variant="outlined"
+              startIcon={<RestartAlt />}
+              onClick={() => {
+                setDemoRecords(patients);
+                setMessage("Demo patient data was reset.");
+              }}
+            >
+              Reset demo data
+            </Button>
+          )}
           <TextField
             size="small"
             placeholder="Search patient / MRN"
