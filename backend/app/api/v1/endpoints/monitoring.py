@@ -2,9 +2,17 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.api.v1.endpoints.auth import current_user
+from app.core.database import SessionLocal, get_db
+from app.core.security import decode_token
+from app.models.patient import Patient
+from app.models.report import Report
+from app.models.session import RehabSession, SessionStatus
+from app.models.user import User
 from app.services.monitor_engine import (
     SUPPORTED_EXERCISES,
     UPLOAD_ROOT,
@@ -22,9 +30,56 @@ def _start_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status, detail=str(exc))
 
 
+def _validate_patient(db: Session, user: User, patient_id: int | None) -> None:
+    if patient_id is None:
+        return
+    patient = db.get(Patient, patient_id)
+    if not patient or patient.clinic_id != user.clinic_id:
+        raise HTTPException(404, "Patient not found")
+
+
+@router.get("/completed")
+def completed_sessions(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    rows = (
+        db.query(RehabSession)
+        .join(Patient, Patient.id == RehabSession.patient_id)
+        .filter(
+            Patient.clinic_id == user.clinic_id,
+            RehabSession.status == SessionStatus.COMPLETED,
+        )
+        .order_by(RehabSession.ended_at.desc(), RehabSession.created_at.desc())
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "patient_id": row.patient_id,
+            "patient_name": row.patient.full_name,
+            "exercise": (
+                row.evidence_clip_url.removeprefix("exercise:")
+                if row.evidence_clip_url and row.evidence_clip_url.startswith("exercise:")
+                else "Rehabilitation exercise"
+            ),
+            "ended_at": row.ended_at or row.created_at,
+            "movement_quality_score": float(row.movement_quality_score or 0),
+            "risk_score": float(row.risk_score or 0),
+            "has_report": (
+                db.query(Report).filter(Report.session_id == row.id).first()
+                is not None
+            ),
+        }
+        for row in rows
+    ]
+
+
 @router.get("/monitor/status")
-def monitor_status():
-    return monitor_engine.status()
+def monitor_status(user: User = Depends(current_user)):
+    return monitor_engine.status_for(user.id, user.clinic_id)
 
 
 @router.post("/monitor/live", status_code=202)
@@ -33,9 +88,14 @@ def start_live_monitor(
     camera_index: int = 0,
     track_arm: str = "right",
     patient_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
+    _validate_patient(db, user, patient_id)
     try:
-        return monitor_engine.start_camera(exercise, camera_index, track_arm, patient_id)
+        return monitor_engine.start_camera(
+            exercise, camera_index, track_arm, patient_id, user.id, user.clinic_id
+        )
     except (RuntimeError, ValueError) as exc:
         raise _start_error(exc) from exc
 
@@ -46,11 +106,23 @@ async def browser_camera_monitor(
     exercise: str = "bicep_curl",
     track_arm: str = "right",
     patient_id: int | None = None,
+    token: str = "",
 ):
-    await websocket.accept()
     started = False
+    user = None
+    db = SessionLocal()
     try:
-        monitor_engine.start_browser(exercise, track_arm, patient_id)
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            raise ValueError("Invalid access token")
+        user = db.get(User, int(payload["sub"]))
+        if not user or not user.is_active:
+            raise ValueError("Invalid access token")
+        _validate_patient(db, user, patient_id)
+        await websocket.accept()
+        monitor_engine.start_browser(
+            exercise, track_arm, patient_id, user.id, user.clinic_id
+        )
         started = True
         while True:
             frame = await websocket.receive_bytes()
@@ -58,11 +130,17 @@ async def browser_camera_monitor(
                 monitor_engine.push_browser_frame(frame)
     except WebSocketDisconnect:
         pass
-    except (RuntimeError, ValueError) as exc:
-        await websocket.send_json({"error": str(exc)})
+    except HTTPException:
+        await websocket.close(code=4404)
+    except Exception as exc:
+        if websocket.client_state.name == "CONNECTED":
+            await websocket.send_json({"error": str(exc)})
+        else:
+            await websocket.close(code=4401)
     finally:
         if started:
-            monitor_engine.stop()
+            monitor_engine.stop_for(user.id, user.clinic_id)
+        db.close()
 
 
 @router.post("/monitor/upload", status_code=202)
@@ -71,7 +149,10 @@ async def upload_video(
     exercise: str = Form("bicep_curl"),
     track_arm: str = Form("right"),
     patient_id: int | None = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
+    _validate_patient(db, user, patient_id)
     if exercise not in SUPPORTED_EXERCISES:
         raise HTTPException(400, f"Unsupported exercise: {exercise}")
     suffix = Path(video.filename or "").suffix.lower()
@@ -88,7 +169,9 @@ async def upload_video(
                 if total > MAX_UPLOAD_BYTES:
                     raise HTTPException(413, "Video exceeds the 500 MB limit")
                 output.write(chunk)
-        return monitor_engine.start_video(destination, exercise, track_arm, patient_id)
+        return monitor_engine.start_video(
+            destination, exercise, track_arm, patient_id, user.id, user.clinic_id
+        )
     except HTTPException:
         destination.unlink(missing_ok=True)
         raise
@@ -100,12 +183,19 @@ async def upload_video(
 
 
 @router.post("/monitor/stop")
-def stop_monitor():
-    return monitor_engine.stop()
+def stop_monitor(user: User = Depends(current_user)):
+    try:
+        return monitor_engine.stop_for(user.id, user.clinic_id)
+    except PermissionError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @router.get("/monitor/stream")
-def monitor_stream():
+def monitor_stream(token: str = ""):
+    try:
+        monitor_engine.assert_media_token(token)
+    except PermissionError as exc:
+        raise HTTPException(404, str(exc)) from exc
     return StreamingResponse(
         monitor_engine.iter_mjpeg(),
         media_type="multipart/x-mixed-replace; boundary=frame",
@@ -114,7 +204,11 @@ def monitor_stream():
 
 
 @router.get("/monitor/result")
-def monitor_result():
+def monitor_result(token: str = ""):
+    try:
+        monitor_engine.assert_media_token(token)
+    except PermissionError as exc:
+        raise HTTPException(404, str(exc)) from exc
     path = monitor_engine.result_path()
     if path is None:
         raise HTTPException(404, "No processed video is available")

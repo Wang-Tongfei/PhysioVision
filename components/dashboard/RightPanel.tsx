@@ -7,7 +7,7 @@ import SectionCard from "@/components/common/SectionCard";
 import { Shield, Speed, BatteryAlert, SyncProblem, AutoAwesome } from "@mui/icons-material";
 import { aiRecommendation } from "@/lib/mockData";
 import { useDataMode } from "@/lib/dataMode";
-import { API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 
 function MetricRow({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
   const num = parseInt(value);
@@ -64,8 +64,7 @@ export default function RightPanel() {
 
   useEffect(() => {
     if (mode !== "live") return;
-    const load = () => fetch(`${API_BASE}/sessions/monitor/status`)
-      .then((response) => response.json())
+    const load = () => api<typeof live>("/sessions/monitor/status")
       .then(setLive)
       .catch(() => setLive(null));
     load();

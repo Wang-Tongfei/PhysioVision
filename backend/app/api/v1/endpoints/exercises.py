@@ -7,6 +7,7 @@ from app.models.exercise import Exercise, ExercisePrescription
 from app.schemas.exercise import ExerciseCreate, ExerciseOut, PrescriptionCreate, PrescriptionOut
 from app.models.patient import Patient
 from app.models.user import User
+from app.models.session import RehabSession
 from app.api.v1.endpoints.auth import current_user
 
 router = APIRouter()
@@ -44,6 +45,38 @@ def create_exercise(
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.delete("/{exercise_id}", status_code=204)
+def delete_exercise(
+    exercise_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    exercise = (
+        db.query(Exercise)
+        .filter(
+            Exercise.id == exercise_id,
+            Exercise.clinic_id == user.clinic_id,
+        )
+        .first()
+    )
+    if not exercise:
+        raise HTTPException(404, "Exercise not found")
+    prescriptions = db.query(ExercisePrescription).filter(
+        ExercisePrescription.exercise_id == exercise_id
+    ).count()
+    sessions = db.query(RehabSession).filter(
+        RehabSession.exercise_id == exercise_id
+    ).count()
+    if prescriptions or sessions:
+        raise HTTPException(
+            409,
+            "Exercise cannot be deleted because prescriptions or sessions reference it",
+        )
+    db.delete(exercise)
+    db.commit()
+    return None
 
 
 @router.post("/prescriptions", response_model=PrescriptionOut, status_code=201)

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Box, CircularProgress, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
-import { Search, PersonAdd, EmojiEvents, LocalHospital, People } from "@mui/icons-material";
+import { DeleteOutline, Search, PersonAdd, EmojiEvents, LocalHospital, People } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import EChart from "@/components/charts/EChart";
 import { lineOption } from "@/components/charts/chartOptions";
@@ -116,6 +116,23 @@ export default function PatientsPage() {
     setAddOpen(false);
     setForm({ name: "", mrn: "", age: "40", diagnosis: "", risk: "Low" });
     setMessage(`${next.name} was added.`);
+  };
+
+  const deletePatient = async () => {
+    if (!selected || !window.confirm(`Delete ${selected.name}? This cannot be undone.`)) return;
+    if (mode === "live") {
+      try {
+        await api(`/patients/${selected.id}`, { method: "DELETE" });
+        setLiveRecords((current) => current.filter((patient) => patient.id !== selected.id));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not delete the patient.");
+        return;
+      }
+    } else {
+      setDemoRecords((current) => current.filter((patient) => patient.id !== selected.id));
+    }
+    setSelected(null);
+    setMessage(`${selected.name} was deleted.`);
   };
 
   return (
@@ -265,13 +282,16 @@ export default function PatientsPage() {
           )}
         </DialogContent>
         <DialogActions>
+          <Button color="error" startIcon={<DeleteOutline />} onClick={deletePatient}>
+            Delete patient
+          </Button>
           <Button onClick={() => setSelected(null)}>Close</Button>
           <Button variant="contained" onClick={() => { setSelected(null); setMessage("Patient record opened for review."); }}>Review record</Button>
         </DialogActions>
       </Dialog>
 
       <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
-        <Alert severity={message.includes("required") || message.includes("exists") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
+        <Alert severity={message.includes("required") || message.includes("exists") || message.includes("cannot") || message.includes("Could not") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
       </Snackbar>
     </Box>
   );

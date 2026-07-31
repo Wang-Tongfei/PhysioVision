@@ -56,19 +56,28 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
   const pathname = usePathname();
   const theme = useTheme();
   const { mode } = useDataMode();
-  const [activeSessions, setActiveSessions] = useState(mode === "demo" ? 6 : 0);
+  const [patientCount, setPatientCount] = useState(mode === "demo" ? 6 : 0);
 
   useEffect(() => {
     if (mode === "demo") {
-      setActiveSessions(6);
-      return;
+      const loadDemoCount = () => {
+        try {
+          const saved = window.localStorage.getItem("physiovision.patients");
+          setPatientCount(saved ? JSON.parse(saved).length : 6);
+        } catch {
+          setPatientCount(6);
+        }
+      };
+      loadDemoCount();
+      const timer = window.setInterval(loadDemoCount, 2000);
+      return () => window.clearInterval(timer);
     }
     const load = () =>
-      api<{ active_sessions: number }>("/analytics/clinic/kpi")
-        .then((result) => setActiveSessions(result.active_sessions ?? 0))
-        .catch(() => setActiveSessions(0));
+      api<{ active_patients: number }>("/analytics/clinic/kpi")
+        .then((result) => setPatientCount(result.active_patients ?? 0))
+        .catch(() => setPatientCount(0));
     load();
-    const timer = window.setInterval(load, 10000);
+    const timer = window.setInterval(load, 2000);
     return () => window.clearInterval(timer);
   }, [mode]);
 
@@ -116,7 +125,7 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
       >
         <LiveIcon sx={{ color: "#10d97e", fontSize: 12 }} className="pulse-dot" />
         <Typography variant="caption" sx={{ color: "#10d97e", fontWeight: 700 }}>
-          {activeSessions} {activeSessions === 1 ? "PATIENT" : "PATIENTS"} LIVE
+          {patientCount} {patientCount === 1 ? "PATIENT" : "PATIENTS"} LIVE
         </Typography>
       </Box>
 

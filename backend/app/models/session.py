@@ -13,6 +13,7 @@ class SessionStatus(str):
     ACTIVE = "active"
     COMPLETED = "completed"
     ABORTED = "aborted"
+    INSUFFICIENT_DATA = "insufficient_data"
 
 
 class RehabSession(Base):

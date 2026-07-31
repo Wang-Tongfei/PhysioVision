@@ -84,7 +84,7 @@ export default function DashboardPage() {
         <Stack direction="row" spacing={1}>
           <Chip
             icon={<FiberManualRecord sx={{ fontSize: 12, color: "#10d97e !important" }} />}
-            label={`${kpi.active_sessions} ${kpi.active_sessions === 1 ? "patient" : "patients"} live`}
+            label={`${kpi.active_patients} ${kpi.active_patients === 1 ? "patient" : "patients"} live`}
             sx={{ background: "rgba(16,217,126,0.1)", border: "1px solid rgba(16,217,126,0.3)", color: "#10d97e", fontWeight: 700 }}
           />
           <Chip

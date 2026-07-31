@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from app.agents.coach_agent import coach
 from app.agents.risk_agent import assess
@@ -8,15 +9,16 @@ from app.agents.soap_agent import draft_soap
 
 class AgentPipelineTest(unittest.TestCase):
     def test_soap_has_stable_template_without_foundry_credentials(self):
-        result = draft_soap(
-            {
-                "movement_quality_score": 82,
-                "rom_achieved_deg": 72,
-                "rom_target_deg": 70,
-                "total_reps": 10,
-            },
-            subjective="Mild fatigue after the final set.",
-        )
+        with patch("app.agents.soap_agent.generate_soap", return_value=None):
+            result = draft_soap(
+                {
+                    "movement_quality_score": 82,
+                    "rom_achieved_deg": 72,
+                    "rom_target_deg": 70,
+                    "total_reps": 10,
+                },
+                subjective="Mild fatigue after the final set.",
+            )
 
         self.assertEqual(result["generation_mode"], "template")
         self.assertEqual(

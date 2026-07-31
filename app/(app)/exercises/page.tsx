@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, IconButton,
   DialogTitle, Grid, MenuItem, Snackbar, Stack, TextField, Typography,
 } from "@mui/material";
-import { Add, Assignment, FitnessCenter, PlayCircle } from "@mui/icons-material";
+import { Add, Assignment, DeleteOutline, FitnessCenter, PlayCircle } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import { patients } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
@@ -149,6 +149,22 @@ export default function ExercisesPage() {
     setMessage(`${prescribe.name} prescribed to ${patient?.name}.`);
   };
 
+  const deleteExercise = async (exercise: ExerciseRecord) => {
+    if (!window.confirm(`Delete ${exercise.name}? This cannot be undone.`)) return;
+    if (mode === "live") {
+      try {
+        await api(`/exercises/${exercise.id}`, { method: "DELETE" });
+        setLiveExercises((current) => current.filter((item) => item.id !== exercise.id));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not delete the exercise.");
+        return;
+      }
+    } else {
+      setDemoExercises((current) => current.filter((item) => item.id !== exercise.id));
+    }
+    setMessage(`${exercise.name} was deleted.`);
+  };
+
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
@@ -178,7 +194,14 @@ export default function ExercisesPage() {
               title={exercise.name}
               subtitle={exercise.protocol}
               icon={<FitnessCenter sx={{ fontSize: 20 }} />}
-              action={<Chip label={exercise.focus} size="small" sx={{ bgcolor: exercise.color + "22", color: exercise.color, fontWeight: 700, border: `1px solid ${exercise.color}40` }} />}
+              action={
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Chip label={exercise.focus} size="small" sx={{ bgcolor: exercise.color + "22", color: exercise.color, fontWeight: 700, border: `1px solid ${exercise.color}40` }} />
+                  <IconButton size="small" color="error" aria-label={`Delete ${exercise.name}`} onClick={() => deleteExercise(exercise)}>
+                    <DeleteOutline fontSize="small" />
+                  </IconButton>
+                </Stack>
+              }
             >
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
                 <Box sx={{ width: 56, height: 56, borderRadius: 2, background: `${exercise.color}1a`, border: `1px solid ${exercise.color}40`, color: exercise.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -241,7 +264,7 @@ export default function ExercisesPage() {
       </Dialog>
 
       <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
-        <Alert severity={message.includes("required") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
+        <Alert severity={message.includes("required") || message.includes("cannot") || message.includes("Could not") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
       </Snackbar>
     </Box>
   );

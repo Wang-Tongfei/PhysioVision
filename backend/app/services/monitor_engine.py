@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import queue
+import secrets
 import sys
 import threading
 import time
@@ -152,11 +153,41 @@ class MonitorEngine:
             "coach_message": None,
             "coach_severity": "info",
             "therapist_summary": None,
+            "data_status": None,
+            "media_token": None,
+            "_owner_user_id": None,
+            "_owner_clinic_id": None,
         }
+
+    @staticmethod
+    def _public(status: dict) -> dict:
+        return {key: value for key, value in status.items() if not key.startswith("_")}
 
     def status(self) -> dict:
         with self._lock:
-            return dict(self._status)
+            return self._public(self._status)
+
+    def status_for(self, user_id: int, clinic_id: int) -> dict:
+        with self._lock:
+            if not self._is_owner(user_id, clinic_id):
+                return self._public(self._idle_status())
+            return self._public(self._status)
+
+    def _is_owner(self, user_id: int, clinic_id: int) -> bool:
+        return (
+            self._status.get("_owner_user_id") == user_id
+            and self._status.get("_owner_clinic_id") == clinic_id
+        )
+
+    def assert_owner(self, user_id: int, clinic_id: int) -> None:
+        with self._lock:
+            if not self._is_owner(user_id, clinic_id):
+                raise PermissionError("Monitoring job not found")
+
+    def assert_media_token(self, token: str) -> None:
+        with self._lock:
+            if not token or token != self._status.get("media_token"):
+                raise PermissionError("Monitoring media not found")
 
     def result_path(self) -> Path | None:
         with self._lock:
@@ -169,6 +200,8 @@ class MonitorEngine:
         camera_index: int = 0,
         track_arm: str = "right",
         patient_id: int | None = None,
+        owner_user_id: int | None = None,
+        owner_clinic_id: int | None = None,
     ) -> dict:
         return self._start(
             source=camera_index,
@@ -176,6 +209,8 @@ class MonitorEngine:
             exercise=exercise,
             track_arm=track_arm,
             patient_id=patient_id,
+            owner_user_id=owner_user_id,
+            owner_clinic_id=owner_clinic_id,
         )
 
     def start_video(
@@ -184,16 +219,20 @@ class MonitorEngine:
         exercise: str,
         track_arm: str = "right",
         patient_id: int | None = None,
+        owner_user_id: int | None = None,
+        owner_clinic_id: int | None = None,
     ) -> dict:
-        return self._start(str(path), "upload", exercise, track_arm, patient_id)
+        return self._start(str(path), "upload", exercise, track_arm, patient_id, owner_user_id, owner_clinic_id)
 
     def start_browser(
         self,
         exercise: str,
         track_arm: str = "right",
         patient_id: int | None = None,
+        owner_user_id: int | None = None,
+        owner_clinic_id: int | None = None,
     ) -> dict:
-        return self._start(None, "browser", exercise, track_arm, patient_id)
+        return self._start(None, "browser", exercise, track_arm, patient_id, owner_user_id, owner_clinic_id)
 
     def push_browser_frame(self, jpeg: bytes) -> None:
         with self._lock:
@@ -208,6 +247,8 @@ class MonitorEngine:
         exercise: str,
         track_arm: str,
         patient_id: int | None = None,
+        owner_user_id: int | None = None,
+        owner_clinic_id: int | None = None,
     ) -> dict:
         if exercise not in SUPPORTED_EXERCISES:
             raise ValueError(f"Unsupported exercise: {exercise}")
@@ -230,6 +271,9 @@ class MonitorEngine:
                     "source": source_kind,
                     "exercise": exercise,
                     "patient_id": patient_id,
+                    "media_token": secrets.token_urlsafe(24),
+                    "_owner_user_id": owner_user_id,
+                    "_owner_clinic_id": owner_clinic_id,
                 }
             )
             self._thread = threading.Thread(
@@ -239,14 +283,18 @@ class MonitorEngine:
                 name="physiovision-monitor",
             )
             self._thread.start()
-            return dict(self._status)
+            return self._public(self._status)
 
     def stop(self) -> dict:
         self._stop_event.set()
         with self._lock:
             if self._status["phase"] in {"starting", "running"}:
                 self._status["phase"] = "stopping"
-            return dict(self._status)
+            return self._public(self._status)
+
+    def stop_for(self, user_id: int, clinic_id: int) -> dict:
+        self.assert_owner(user_id, clinic_id)
+        return self.stop()
 
     def iter_mjpeg(self) -> Iterator[bytes]:
         """Yield the latest rendered frame as a browser-compatible MJPEG stream."""
@@ -448,6 +496,9 @@ class MonitorEngine:
                         )
                         self._frame_ready.notify_all()
 
+                if analyzer.is_complete:
+                    break
+
                 if source_kind == "upload":
                     elapsed = time.monotonic() - loop_started
                     self._stop_event.wait(max(0.0, frame_interval - elapsed))
@@ -455,7 +506,11 @@ class MonitorEngine:
             if writer is not None:
                 writer.release()
                 writer = None
-            stopped = self._stop_event.is_set()
+            workout_completed = bool(analyzer.is_complete)
+            valid_data = analyzed_frames > 0 and float(analyzer.progress) > 0
+            session_completed = workout_completed or (
+                source_kind == "upload" and not self._stop_event.is_set()
+            )
             completion = min(
                 1.0,
                 float(analyzer.progress) / max(1.0, float(analyzer.target)),
@@ -475,7 +530,6 @@ class MonitorEngine:
                     if len(metric_values) > 1
                     else round(metric_values[0], 1) if metric_values else 0.0
                 )
-            base_risk = self._patient_base_risk(patient_id)
             telemetry = {
                 "movement_quality_score": quality,
                 "rom_achieved_deg": rom_achieved,
@@ -484,38 +538,51 @@ class MonitorEngine:
                 "fatigue_index": fatigue,
                 "compensation_detected": compensation,
             }
-            risk = assess(telemetry, base_risk=base_risk)
-            coaching = coach(telemetry, risk_tier=risk["tier"])
-            therapist = summarize(
-                telemetry,
-                baseline_quality=self._patient_baseline(patient_id),
-                risk=risk,
-            )
+            risk = None
+            therapist = None
+            if valid_data:
+                risk = assess(telemetry, base_risk=self._patient_base_risk(patient_id))
+                coaching = coach(telemetry, risk_tier=risk["tier"])
+                therapist = summarize(
+                    telemetry,
+                    baseline_quality=self._patient_baseline(patient_id),
+                    risk=risk,
+                )
+            else:
+                coaching = {
+                    "message": "Insufficient movement data. Complete at least one valid repetition and try again.",
+                    "severity": "warning",
+                }
             session_id = self._persist_summary(
                 patient_id=patient_id,
                 exercise=exercise,
                 source_kind=source_kind,
-                stopped=stopped,
+                completed=session_completed,
                 started_at=started_at,
                 telemetry=telemetry,
                 risk=risk,
                 therapist=therapist,
+                valid_data=valid_data,
+                clinic_id=self._status.get("_owner_clinic_id"),
             )
             with self._frame_ready:
-                self._status["phase"] = "stopped" if stopped else "completed"
-                self._status["complete"] = bool(analyzer.is_complete)
+                self._status["phase"] = (
+                    "completed" if valid_data and session_completed else "stopped"
+                )
+                self._status["complete"] = workout_completed
                 self._status["has_result_video"] = self._result_path is not None
                 self._status.update(
                     {
                         "session_id": session_id,
-                        "movement_quality_score": quality,
-                        "risk_score": risk["risk_score"],
-                        "risk_tier": risk["tier"],
-                        "fatigue_index": fatigue,
-                        "compensation_detected": compensation,
+                        "movement_quality_score": quality if valid_data else None,
+                        "risk_score": risk["risk_score"] if risk else None,
+                        "risk_tier": risk["tier"] if risk else None,
+                        "fatigue_index": fatigue if valid_data else None,
+                        "compensation_detected": compensation if valid_data else False,
                         "coach_message": coaching["message"],
                         "coach_severity": coaching["severity"],
                         "therapist_summary": therapist,
+                        "data_status": "valid" if valid_data else "insufficient_data",
                     }
                 )
                 self._frame_ready.notify_all()
@@ -575,11 +642,13 @@ class MonitorEngine:
         patient_id: int | None,
         exercise: str,
         source_kind: str,
-        stopped: bool,
+        completed: bool,
         started_at: datetime,
         telemetry: dict,
-        risk: dict,
-        therapist: dict,
+        risk: dict | None,
+        therapist: dict | None,
+        valid_data: bool,
+        clinic_id: int | None,
     ) -> int | None:
         if patient_id is None:
             return None
@@ -589,19 +658,26 @@ class MonitorEngine:
         from app.models.session import RehabSession, SessionStatus
 
         with SessionLocal() as db:
-            if db.get(Patient, patient_id) is None:
+            patient = db.get(Patient, patient_id)
+            if patient is None or (
+                clinic_id is not None and patient.clinic_id != clinic_id
+            ):
                 return None
             row = RehabSession(
                 patient_id=patient_id,
                 edge_node_id="local-monitor",
                 camera_id=source_kind,
-                status=SessionStatus.ABORTED if stopped else SessionStatus.COMPLETED,
+                status=(
+                    SessionStatus.INSUFFICIENT_DATA
+                    if not valid_data
+                    else SessionStatus.COMPLETED if completed else SessionStatus.ABORTED
+                ),
                 started_at=started_at,
                 ended_at=datetime.now(timezone.utc),
-                movement_quality_score=telemetry["movement_quality_score"],
-                risk_score=risk["risk_score"],
-                fatigue_index=telemetry["fatigue_index"],
-                compensation_detected=telemetry["compensation_detected"],
+                movement_quality_score=telemetry["movement_quality_score"] if valid_data else None,
+                risk_score=risk["risk_score"] if risk else None,
+                fatigue_index=telemetry["fatigue_index"] if valid_data else None,
+                compensation_detected=telemetry["compensation_detected"] if valid_data else False,
                 total_reps=telemetry["total_reps"],
                 rom_achieved_deg=telemetry["rom_achieved_deg"],
                 rom_target_deg=telemetry["rom_target_deg"],
@@ -609,7 +685,9 @@ class MonitorEngine:
             )
             db.add(row)
             db.flush()
-            if risk["tier"] != "low" or telemetry["compensation_detected"]:
+            if risk and therapist and (
+                risk["tier"] != "low" or telemetry["compensation_detected"]
+            ):
                 db.add(
                     Alert(
                         session_id=row.id,

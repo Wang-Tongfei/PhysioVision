@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.models.patient import Patient, RiskTier
 from app.models.report import Report
 from app.models.session import RehabSession
+from app.models.exercise import ExercisePrescription
 from app.schemas.patient import PatientCreate, PatientOut
 from app.schemas.report import ReportOut
 from app.models.user import User
@@ -44,6 +45,37 @@ def create_patient(
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.delete("/{patient_id}", status_code=204)
+def delete_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    patient = (
+        db.query(Patient)
+        .filter(Patient.id == patient_id, Patient.clinic_id == user.clinic_id)
+        .first()
+    )
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+    related = {
+        "sessions": db.query(RehabSession).filter(RehabSession.patient_id == patient_id).count(),
+        "reports": db.query(Report).filter(Report.patient_id == patient_id).count(),
+        "prescriptions": db.query(ExercisePrescription).filter(
+            ExercisePrescription.patient_id == patient_id
+        ).count(),
+    }
+    if any(related.values()):
+        summary = ", ".join(f"{count} {name}" for name, count in related.items() if count)
+        raise HTTPException(
+            409,
+            f"Patient cannot be deleted because clinical history exists ({summary})",
+        )
+    db.delete(patient)
+    db.commit()
+    return None
 
 
 @router.get("/{patient_id}", response_model=PatientOut)

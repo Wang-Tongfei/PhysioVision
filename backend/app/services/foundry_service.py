@@ -45,7 +45,6 @@ def generate_soap(telemetry: dict, subjective: str, decision_support: dict) -> d
         },
         json={
             "model": settings.AZURE_OPENAI_DEPLOYMENT,
-            "temperature": 0.1,
             "messages": [
                 {
                     "role": "system",

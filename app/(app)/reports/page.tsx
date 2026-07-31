@@ -6,19 +6,26 @@ import {
   DialogTitle, FormControlLabel, Grid, MenuItem, Snackbar, Stack, TextField,
   Typography,
 } from "@mui/material";
-import { AutoAwesome, Download, NoteAdd, SyncProblem, VerifiedUser, Warning } from "@mui/icons-material";
+import { AutoAwesome, DeleteOutline, Download, NoteAdd, SyncProblem, VerifiedUser, Warning } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import GaugeRing from "@/components/common/GaugeRing";
 import { aiRecommendation, alerts as mockAlerts, patients, reports as seedReports } from "@/lib/mockData";
 import { usePersistentState } from "@/lib/usePersistentState";
-import { api } from "@/lib/api";
+import { api, getSession } from "@/lib/api";
 import { useDataMode } from "@/lib/dataMode";
 
 const severityColor: Record<string, string> = { critical: "#ef5b5b", warning: "#f5b73b", info: "#22d3ee" };
-const DEFAULT_RECORDER = "Dr. Sarah Kim, PT";
+const DEFAULT_RECORDER = "Dr. Therapist, PT";
+
+const accountRecorder = () => {
+  const name = getSession()?.user?.full_name?.trim() || "Therapist";
+  const titled = /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+  return /,\s*PT$/i.test(titled) ? titled : `${titled}, PT`;
+};
 
 interface SoapReport {
   id: number;
+  sessionId?: number;
   patient: string;
   date: string;
   type: string;
@@ -38,6 +45,7 @@ interface SoapReport {
 interface ApiReport {
   id: number;
   patient_id: number;
+  session_id?: number;
   title?: string;
   soap: {
     subjective?: string;
@@ -72,6 +80,17 @@ interface TherapistDecision {
   needs_review?: boolean;
 }
 
+interface CompletedSession {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  exercise: string;
+  ended_at?: string;
+  movement_quality_score: number;
+  risk_score: number;
+  has_report: boolean;
+}
+
 const localDateTime = () => {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
@@ -101,11 +120,13 @@ const initialReports: SoapReport[] = seedReports.map((report) => ({
 }));
 
 export default function ReportsPage() {
+  const recorder = accountRecorder();
   const [demoReports, setDemoReports] = usePersistentState<SoapReport[]>("physiovision.reports", initialReports);
   const [liveReports, setLiveReports] = useState<SoapReport[]>([]);
   const [patientChoices, setPatientChoices] = useState(patients);
   const [liveAlerts, setLiveAlerts] = useState<DisplayAlert[]>([]);
   const [assistant, setAssistant] = useState<TherapistDecision | null>(null);
+  const [completedSessions, setCompletedSessions] = useState<CompletedSession[]>([]);
   const { mode } = useDataMode();
   const reports = mode === "demo" ? demoReports : liveReports;
   const updateReports = (updater: (current: SoapReport[]) => SoapReport[]) => {
@@ -114,10 +135,12 @@ export default function ReportsPage() {
   };
   const [soapOpen, setSoapOpen] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
-  const [soap, setSoap] = useState(newSoapForm);
+  const [soap, setSoap] = useState(() => ({ ...newSoapForm(), author: recorder, signature: recorder }));
   const [autoPatient, setAutoPatient] = useState(patients[0].name);
+  const [autoSessionId, setAutoSessionId] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [signing, setSigning] = useState<SoapReport | null>(null);
-  const [signer, setSigner] = useState(DEFAULT_RECORDER);
+  const [signer, setSigner] = useState(recorder);
   const [message, setMessage] = useState("");
   useEffect(() => {
     if (mode === "demo") {
@@ -135,8 +158,9 @@ export default function ReportsPage() {
         message: string;
       }>>("/alerts?unack=true"),
       api<TherapistDecision>("/analytics/clinic/assistant"),
+      api<CompletedSession[]>("/sessions/completed"),
     ])
-      .then(([patientRows, reportRows, alertRows, assistantRow]) => {
+      .then(([patientRows, reportRows, alertRows, assistantRow, sessionRows]) => {
         const choices = patientRows.map((patient) => ({
           id: patient.id,
           name: patient.full_name,
@@ -159,8 +183,15 @@ export default function ReportsPage() {
           msg: alert.message,
         })));
         setAssistant(assistantRow);
+        setCompletedSessions(sessionRows);
+        setAutoSessionId(String(
+          sessionRows.find((session) => !session.has_report)?.id ??
+          sessionRows[0]?.id ??
+          ""
+        ));
         setLiveReports(reportRows.map((report) => ({
           id: report.id,
+          sessionId: report.session_id,
           patient: names.get(report.patient_id) || `Patient ${report.patient_id}`,
           date: (report.soap.visit_datetime || report.created_at || "").slice(0, 10),
           type: report.generated_by === "therapist" ? "Manual" : "SOAP Auto",
@@ -243,29 +274,104 @@ export default function ReportsPage() {
       authenticatedAt: new Date().toISOString(),
     }, ...current]);
     setSoapOpen(false);
-    setSoap({ ...newSoapForm(), patient: patientChoices[0]?.name || "" });
+    setSoap({
+      ...newSoapForm(),
+      patient: patientChoices[0]?.name || "",
+      author: recorder,
+      signature: recorder,
+    });
     setMessage("SOAP note saved and authenticated.");
   };
 
-  const generateReport = () => {
+  const generateReport = async () => {
+    setGenerating(true);
+    if (mode === "live") {
+      const session = completedSessions.find((item) => item.id === Number(autoSessionId));
+      if (!session) {
+        setMessage("Select a completed patient session.");
+        setGenerating(false);
+        return;
+      }
+      try {
+        const report = await api<ApiReport>(`/reports/${session.id}/generate`, {
+          method: "POST",
+        });
+        setLiveReports((current) => [{
+          id: report.id,
+          sessionId: session.id,
+          patient: session.patient_name,
+          date: (report.created_at || new Date().toISOString()).slice(0, 10),
+          type: "SOAP Auto",
+          quality: session.movement_quality_score,
+          risk: session.risk_score >= 66 ? "High" : session.risk_score >= 33 ? "Moderate" : "Low",
+          plan: report.soap.plan || "",
+          subjective: report.soap.subjective,
+          objective: report.soap.objective,
+          assessment: report.soap.assessment,
+          author: report.soap.author || "PhysioVision SOAP Agent",
+          authenticated: false,
+        }, ...current]);
+        setCompletedSessions((current) => current.map((item) =>
+          item.id === session.id ? { ...item, has_report: true } : item
+        ));
+        setAutoOpen(false);
+        setMessage(`SOAP draft generated for ${session.patient_name}.`);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not generate the SOAP draft.");
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
     const patient = patientChoices.find((item) => item.name === autoPatient)!;
-    updateReports((current) => [{
-      id: Math.max(0, ...current.map((item) => item.id)) + 1,
-      patient: patient.name,
-      date: new Date().toISOString().slice(0, 10),
-      type: "SOAP Auto",
-      quality: patient.score,
-      risk: patient.risk,
-      plan: patient.risk === "High" ? "Reduce load and schedule therapist review." : "Continue protocol and progress when movement quality remains stable.",
-      subjective: "AI-generated draft; patient-reported status requires therapist review.",
-      objective: `Movement quality ${patient.score}/100; adherence ${patient.adherence}%.`,
-      assessment: `${patient.risk} risk based on the latest available movement data.`,
-      visitDateTime: localDateTime(),
-      author: "PhysioVision SOAP Agent",
-      authenticated: false,
-    }, ...current]);
-    setAutoOpen(false);
-    setMessage(`Auto report generated for ${patient.name}.`);
+    const riskScore = patient.risk === "High" ? 72 : patient.risk === "Moderate" ? 45 : 18;
+    try {
+      const result = await api<{
+        generation_mode: "foundry" | "template" | "template-fallback";
+        soap: {
+          subjective: string;
+          objective: string;
+          assessment: string;
+          plan: string;
+        };
+      }>("/reports/demo/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          patient_name: patient.name,
+          movement_quality_score: patient.score,
+          risk_score: riskScore,
+          total_reps: 10,
+          rom_achieved_deg: patient.trend.at(-1) ?? 90,
+          rom_target_deg: 110,
+          subjective: "Demo patient completed the prescribed session and reported mild fatigue after the final set.",
+        }),
+      });
+      updateReports((current) => [{
+        id: Math.max(0, ...current.map((item) => item.id)) + 1,
+        patient: patient.name,
+        date: new Date().toISOString().slice(0, 10),
+        type: result.generation_mode === "foundry" ? "SOAP Auto · Foundry Demo" : "SOAP Auto · Demo Fallback",
+        quality: patient.score,
+        risk: patient.risk,
+        plan: result.soap.plan,
+        subjective: result.soap.subjective,
+        objective: result.soap.objective,
+        assessment: result.soap.assessment,
+        visitDateTime: localDateTime(),
+        author: "PhysioVision SOAP Agent",
+        authenticated: false,
+      }, ...current]);
+      setAutoOpen(false);
+      setMessage(
+        result.generation_mode === "foundry"
+          ? `Foundry demo SOAP generated for ${patient.name}.`
+          : `Demo SOAP generated with the local fallback for ${patient.name}.`
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not generate the demo SOAP draft.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const authenticateReport = () => {
@@ -287,6 +393,27 @@ export default function ReportsPage() {
     ));
     setSigning(null);
     setMessage("SOAP note signed and authenticated.");
+  };
+
+  const deleteReport = async (report: SoapReport) => {
+    if (report.authenticated) {
+      setMessage("Authenticated clinical reports cannot be deleted.");
+      return;
+    }
+    if (!window.confirm(`Delete the SOAP draft for ${report.patient}?`)) return;
+    if (mode === "live") {
+      try {
+        await api(`/reports/${report.id}`, { method: "DELETE" });
+        setCompletedSessions((current) => current.map((session) =>
+          session.id === report.sessionId ? { ...session, has_report: false } : session
+        ));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not delete the report.");
+        return;
+      }
+    }
+    updateReports((current) => current.filter((item) => item.id !== report.id));
+    setMessage(`SOAP draft for ${report.patient} was deleted.`);
   };
 
   const downloadFhir = (report: SoapReport) => {
@@ -327,7 +454,7 @@ export default function ReportsPage() {
         </Box>
         <Stack direction="row" spacing={1}>
           <Button disabled={patientChoices.length === 0} variant="outlined" startIcon={<NoteAdd />} onClick={() => setSoapOpen(true)} sx={{ borderColor: "rgba(34,211,238,0.35)", color: "#22d3ee" }}>New SOAP</Button>
-          <Button disabled={mode === "live"} variant="contained" startIcon={<AutoAwesome />} onClick={() => setAutoOpen(true)}>Generate Auto Report</Button>
+          <Button disabled={generating || (mode === "live" && completedSessions.length === 0)} variant="contained" startIcon={<AutoAwesome />} onClick={() => setAutoOpen(true)}>Generate Auto Report</Button>
         </Stack>
       </Stack>
 
@@ -370,9 +497,14 @@ export default function ReportsPage() {
                       <Chip label={`Q ${report.quality}`} size="small" sx={{ bgcolor: "rgba(34,211,238,0.12)", color: "#22d3ee" }} />
                       <Chip label={report.risk} size="small" sx={{ bgcolor: severityColor[report.risk === "High" ? "critical" : "warning"] + "22", color: severityColor[report.risk === "High" ? "critical" : "warning"] }} />
                       {!report.authenticated && (
-                        <Button size="small" onClick={() => { setSigner(DEFAULT_RECORDER); setSigning(report); }}>
-                          Sign
-                        </Button>
+                        <>
+                          <Button size="small" onClick={() => { setSigner(recorder); setSigning(report); }}>
+                            Sign
+                          </Button>
+                          <Button size="small" color="error" startIcon={<DeleteOutline />} onClick={() => deleteReport(report)}>
+                            Delete
+                          </Button>
+                        </>
                       )}
                       <Button size="small" startIcon={<Download />} onClick={() => downloadFhir(report)} sx={{ color: "#22d3ee" }}>FHIR</Button>
                     </Stack>
@@ -478,12 +610,28 @@ export default function ReportsPage() {
       <Dialog open={autoOpen} onClose={() => setAutoOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Generate auto report</DialogTitle>
         <DialogContent>
-          <TextField select fullWidth label="Completed patient session" value={autoPatient} onChange={(e) => setAutoPatient(e.target.value)} sx={{ mt: 1 }}>
-            {patientChoices.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name} · score {patient.score}</MenuItem>)}
-          </TextField>
+          {mode === "live" ? (
+            <TextField select fullWidth label="Completed patient session" value={autoSessionId} onChange={(e) => setAutoSessionId(e.target.value)} sx={{ mt: 1 }}>
+              {completedSessions.map((session) => (
+                <MenuItem key={session.id} value={String(session.id)}>
+                  {session.patient_name} · {session.exercise} · Q {session.movement_quality_score}
+                  {session.has_report ? " · report exists" : ""}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <TextField select fullWidth label="Completed patient session" value={autoPatient} onChange={(e) => setAutoPatient(e.target.value)} sx={{ mt: 1 }}>
+              {patientChoices.map((patient) => <MenuItem key={patient.id} value={patient.name}>{patient.name} · score {patient.score}</MenuItem>)}
+            </TextField>
+          )}
           <Alert severity="info" sx={{ mt: 2 }}>A draft will be generated from the latest movement score, adherence and risk data.</Alert>
         </DialogContent>
-        <DialogActions><Button onClick={() => setAutoOpen(false)}>Cancel</Button><Button variant="contained" onClick={generateReport}>Generate</Button></DialogActions>
+        <DialogActions>
+          <Button disabled={generating} onClick={() => setAutoOpen(false)}>Cancel</Button>
+          <Button disabled={generating} variant="contained" onClick={generateReport}>
+            {generating ? "Generating with Foundry…" : "Generate"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={Boolean(signing)} onClose={() => setSigning(null)} fullWidth maxWidth="xs">
@@ -510,7 +658,7 @@ export default function ReportsPage() {
       </Dialog>
 
       <Snackbar open={Boolean(message)} autoHideDuration={3000} onClose={() => setMessage("")}>
-        <Alert severity={message.includes("required") || message.includes("Complete") || message.includes("Authenticate") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
+        <Alert severity={message.includes("required") || message.includes("Complete") || message.includes("Authenticate") || message.includes("cannot") || message.includes("Could not") || message.includes("already exists") ? "error" : "success"} onClose={() => setMessage("")}>{message}</Alert>
       </Snackbar>
     </Box>
   );

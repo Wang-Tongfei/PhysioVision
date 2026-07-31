@@ -87,6 +87,8 @@ interface MonitorStatus {
     summary: string;
     suggested_plan: string;
   } | null;
+  data_status: "valid" | "insufficient_data" | null;
+  media_token: string | null;
 }
 
 const IDLE_STATUS: MonitorStatus = {
@@ -116,6 +118,8 @@ const IDLE_STATUS: MonitorStatus = {
   coach_message: null,
   coach_severity: "info",
   therapist_summary: null,
+  data_status: null,
+  media_token: null,
 };
 
 async function apiRequest(path: string, init?: RequestInit) {
@@ -517,14 +521,14 @@ export default function LiveMonitor() {
             controls
             autoPlay
             muted
-            src={`${API_BASE}/sessions/monitor/result?job=${status.job_id}`}
+            src={`${API_BASE}/sessions/monitor/result?job=${status.job_id}&token=${encodeURIComponent(status.media_token ?? "")}`}
             sx={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         ) : showStream ? (
           <Box
             component="img"
             key={`stream-${streamKey}`}
-            src={`${API_BASE}/sessions/monitor/stream?job=${status.job_id ?? ""}`}
+            src={`${API_BASE}/sessions/monitor/stream?job=${status.job_id ?? ""}&token=${encodeURIComponent(status.media_token ?? "")}`}
             alt="Live patient movement with pose overlay"
             sx={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
@@ -658,6 +662,13 @@ export default function LiveMonitor() {
               Therapist Assistant: {status.therapist_summary.summary} {status.therapist_summary.suggested_plan}
             </Typography>
           )}
+        </Alert>
+      )}
+
+      {status.phase === "stopped" && status.data_status === "insufficient_data" && (
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          No valid repetition was detected. This attempt was not risk-scored,
+          did not create an alert, and cannot be used to generate a SOAP report.
         </Alert>
       )}
 

@@ -3,6 +3,7 @@ import sys
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 import cv2
@@ -14,6 +15,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.monitor_engine import monitor_engine
+from app.api.v1.endpoints.auth import current_user
 from main import app
 
 
@@ -35,6 +37,9 @@ class MonitorUploadTest(unittest.TestCase):
             writer.release()
 
             client = TestClient(app)
+            app.dependency_overrides[current_user] = lambda: SimpleNamespace(
+                id=101, clinic_id=202, is_active=True
+            )
             with input_path.open("rb") as video:
                 response = client.post(
                     "/api/v1/sessions/monitor/upload",
@@ -46,17 +51,21 @@ class MonitorUploadTest(unittest.TestCase):
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 status = monitor_engine.status()
-                if status["phase"] in {"completed", "error"}:
+                if status["phase"] in {"completed", "stopped", "error"}:
                     break
                 time.sleep(0.2)
 
             status = monitor_engine.status()
-            self.assertEqual(status["phase"], "completed", status)
+            self.assertEqual(status["phase"], "stopped", status)
+            self.assertEqual(status["data_status"], "insufficient_data")
+            self.assertIsNone(status["risk_score"])
             self.assertTrue(status["has_frame"])
             self.assertTrue(status["has_result_video"])
             self.assertFalse(status["telegram_enabled"])
 
-            result = client.get("/api/v1/sessions/monitor/result")
+            result = client.get(
+                f"/api/v1/sessions/monitor/result?token={status['media_token']}"
+            )
             self.assertEqual(result.status_code, 200, result.text)
             self.assertEqual(result.headers["content-type"], "video/webm")
             self.assertGreater(len(result.content), 0)
@@ -64,6 +73,15 @@ class MonitorUploadTest(unittest.TestCase):
             result_path = monitor_engine.result_path()
             if result_path:
                 result_path.unlink(missing_ok=True)
+            app.dependency_overrides.clear()
+
+    def test_status_is_hidden_from_other_accounts(self):
+        monitor_engine._status.update(
+            {"job_id": "owned", "_owner_user_id": 1, "_owner_clinic_id": 2}
+        )
+        self.assertEqual(monitor_engine.status_for(1, 2)["job_id"], "owned")
+        self.assertEqual(monitor_engine.status_for(9, 9)["phase"], "idle")
+        self.assertIsNone(monitor_engine.status_for(9, 9)["job_id"])
 
 
 if __name__ == "__main__":
