@@ -8,8 +8,6 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        git \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
@@ -21,13 +19,8 @@ RUN apt-get update \
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-ARG PHYSIO_AI_BOT_COMMIT=dff7bccec75eb9fd066cbca6a551f3cad64f97b5
-RUN git clone --filter=blob:none --no-checkout \
-        https://github.com/Wang-Tongfei/Physio_AI_Bot.git Physio_AI_Bot \
-    && git -C Physio_AI_Bot checkout "${PHYSIO_AI_BOT_COMMIT}" \
-    && rm -rf Physio_AI_Bot/.git
-
 COPY backend/ backend/
+COPY Physio_AI_Bot/ Physio_AI_Bot/
 
 WORKDIR /app/backend
 
