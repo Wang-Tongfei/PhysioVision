@@ -7,6 +7,7 @@ encoded for the browser, so the desktop and web views share one visual source.
 from __future__ import annotations
 
 import importlib
+import logging
 import queue
 import secrets
 import sys
@@ -23,6 +24,7 @@ from app.agents.risk_agent import assess
 from app.agents.therapist_agent import summarize
 
 
+logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BOT_ROOT = PROJECT_ROOT / "Physio_AI_Bot"
 DATA_ROOT = PROJECT_ROOT / "backend" / "data"
@@ -104,9 +106,11 @@ def _load_bot_modules():
             "hud": importlib.import_module("hud"),
         }
     except (ImportError, AttributeError) as exc:
+        logger.exception("Vision module import failed")
         raise RuntimeError(
             "Vision dependencies are unavailable. Install backend/requirements.txt "
-            "and initialise the Physio_AI_Bot submodule."
+            "and initialise the Physio_AI_Bot submodule. "
+            f"Cause: {type(exc).__name__}: {exc}"
         ) from exc
 
 
