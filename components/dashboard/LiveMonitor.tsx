@@ -172,36 +172,19 @@ export default function LiveMonitor() {
   }, []);
 
   useEffect(() => {
-    const monitorActive = ["starting", "running", "stopping"].includes(
-      status.phase
-    );
-    if (mode !== "live" && !browserCameraActive && !busy && !monitorActive) {
-      setStatus(IDLE_STATUS);
-      return;
-    }
     refreshStatus();
-    const timer = window.setInterval(refreshStatus, 1500);
+    const timer = window.setInterval(refreshStatus, 750);
     return () => window.clearInterval(timer);
-  }, [browserCameraActive, busy, mode, refreshStatus, status.phase]);
+  }, [refreshStatus]);
 
   useEffect(() => {
-    if (mode !== "live") {
-      setPatients(
-        livePatients.map((patient) => ({
-          id: patient.id,
-          full_name: patient.name,
-        }))
-      );
-      setPatientId((current) => current || String(livePatients[0]?.id ?? ""));
-      return;
-    }
     api<Array<{ id: number; full_name: string }>>("/patients")
       .then((items) => {
         setPatients(items);
         setPatientId((current) => current || String(items[0]?.id ?? ""));
       })
       .catch(() => setPatients([]));
-  }, [mode]);
+  }, []);
 
   const releaseBrowserCamera = useCallback(() => {
     if (captureTimer.current !== null) {
@@ -217,21 +200,6 @@ export default function LiveMonitor() {
   }, []);
 
   useEffect(() => releaseBrowserCamera, [releaseBrowserCamera]);
-
-  useEffect(() => {
-    if (
-      browserCameraActive &&
-      status.job_id &&
-      ["completed", "stopped", "error"].includes(status.phase)
-    ) {
-      releaseBrowserCamera();
-    }
-  }, [
-    browserCameraActive,
-    releaseBrowserCamera,
-    status.job_id,
-    status.phase,
-  ]);
 
   const startLive = async () => {
     setCameraConfirmOpen(false);
@@ -267,17 +235,6 @@ export default function LiveMonitor() {
         socket.onopen = () => resolve();
         socket.onerror = () => reject(new Error("Could not connect camera analysis"));
       });
-      socket.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(String(event.data));
-          if (payload?.error) {
-            setConnectionError(payload.error);
-            releaseBrowserCamera();
-          }
-        } catch {
-          // Binary camera frames are sent by the client; server messages are JSON.
-        }
-      };
       setBrowserCameraActive(true);
       setStreamKey((value) => value + 1);
       captureTimer.current = window.setInterval(() => {
@@ -363,14 +320,9 @@ export default function LiveMonitor() {
     try {
       setStatus(await apiRequest("/sessions/monitor/stop", { method: "POST" }));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Could not stop monitor";
-      if (message.includes("Monitoring job not found")) {
-        setStatus(IDLE_STATUS);
-        setConnectionError(null);
-      } else {
-        setConnectionError(message);
-      }
+      setConnectionError(
+        error instanceof Error ? error.message : "Could not stop monitor"
+      );
     } finally {
       setBusy(false);
     }
@@ -529,7 +481,7 @@ export default function LiveMonitor() {
 
       {connectionError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {connectionError}
+          {connectionError}. Make sure the FastAPI vision service is running.
         </Alert>
       )}
 
