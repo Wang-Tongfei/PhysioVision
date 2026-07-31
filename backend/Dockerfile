@@ -6,9 +6,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# OpenCV's Linux wheels require these shared libraries at runtime.
+# OpenCV's Linux wheels require these shared libraries at runtime. Git is used
+# to fetch the public vision submodule because Render builds this service from
+# the backend directory only.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        git \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
@@ -17,15 +20,16 @@ RUN apt-get update \
         libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Render builds this image from the repository root so both the FastAPI
-# service and the checked-out vision submodule are available.
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ backend/
-COPY Physio_AI_Bot/ Physio_AI_Bot/
+ARG PHYSIO_AI_BOT_COMMIT=dff7bccec75eb9fd066cbca6a551f3cad64f97b5
+RUN git clone --filter=blob:none --no-checkout \
+        https://github.com/Wang-Tongfei/Physio_AI_Bot.git Physio_AI_Bot \
+    && git -C Physio_AI_Bot checkout "${PHYSIO_AI_BOT_COMMIT}" \
+    && rm -rf Physio_AI_Bot/.git
 
-WORKDIR /app/backend
+COPY . .
 
 EXPOSE 8000
 
