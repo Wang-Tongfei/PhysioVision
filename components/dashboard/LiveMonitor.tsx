@@ -363,9 +363,14 @@ export default function LiveMonitor() {
     try {
       setStatus(await apiRequest("/sessions/monitor/stop", { method: "POST" }));
     } catch (error) {
-      setConnectionError(
-        error instanceof Error ? error.message : "Could not stop monitor"
-      );
+      const message =
+        error instanceof Error ? error.message : "Could not stop monitor";
+      if (message.includes("Monitoring job not found")) {
+        setStatus(IDLE_STATUS);
+        setConnectionError(null);
+      } else {
+        setConnectionError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -524,7 +529,7 @@ export default function LiveMonitor() {
 
       {connectionError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {connectionError}. Make sure the FastAPI vision service is running.
+          {connectionError}
         </Alert>
       )}
 
