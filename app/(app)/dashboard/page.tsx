@@ -39,9 +39,9 @@ export default function DashboardPage() {
   const { mode } = useDataMode();
   const [displayName, setDisplayName] = useState("Therapist");
   const [kpi, setKpi] = useState({
-    active_patients: 48,
+    active_patients: 6,
     sessions_today: 6,
-    active_sessions: 6,
+    active_sessions: 4,
     avg_quality: 92,
     alert_rate: 0.03,
   });
@@ -52,7 +52,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (mode === "demo") {
-      setKpi({ active_patients: 48, sessions_today: 6, active_sessions: 6, avg_quality: 92, alert_rate: 0.03 });
+      setKpi({ active_patients: 6, sessions_today: 6, active_sessions: 4, avg_quality: 92, alert_rate: 0.03 });
       return;
     }
     api<typeof kpi>("/analytics/clinic/kpi").then((result) => setKpi({
@@ -84,7 +84,11 @@ export default function DashboardPage() {
         <Stack direction="row" spacing={1}>
           <Chip
             icon={<FiberManualRecord sx={{ fontSize: 12, color: "#10d97e !important" }} />}
-            label={`${kpi.active_patients} ${kpi.active_patients === 1 ? "patient" : "patients"} live`}
+            label={
+              mode === "demo"
+                ? `${kpi.active_patients} demo patients`
+                : `${kpi.active_patients} ${kpi.active_patients === 1 ? "patient" : "patients"} live`
+            }
             sx={{ background: "rgba(16,217,126,0.1)", border: "1px solid rgba(16,217,126,0.3)", color: "#10d97e", fontWeight: 700 }}
           />
           <Chip
@@ -99,7 +103,7 @@ export default function DashboardPage() {
       <Grid container spacing={2.5} mb={2.5}>
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
-            title="Active Patients"
+            title={mode === "demo" ? "Demo Patients" : "Active Patients"}
             value={String(kpi.active_patients)}
             delta="+12%"
             trend="up"
@@ -110,13 +114,13 @@ export default function DashboardPage() {
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <MetricCard
-            title="Live Sessions"
+            title={mode === "demo" ? "Demo Stations" : "Live Sessions"}
             value={String(kpi.active_sessions)}
             delta="+2"
             trend="up"
             icon={<MonitorHeart sx={{ fontSize: 28 }} />}
             color="#10d97e"
-            subtitle="now streaming"
+            subtitle={mode === "demo" ? "sample activity" : "now streaming"}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>

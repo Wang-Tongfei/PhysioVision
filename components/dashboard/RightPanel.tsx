@@ -68,7 +68,7 @@ export default function RightPanel() {
       .then(setLive)
       .catch(() => setLive(null));
     load();
-    const timer = window.setInterval(load, 1000);
+    const timer = window.setInterval(load, 2000);
     return () => window.clearInterval(timer);
   }, [mode]);
 

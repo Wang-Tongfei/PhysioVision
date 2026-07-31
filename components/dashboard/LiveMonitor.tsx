@@ -172,19 +172,33 @@ export default function LiveMonitor() {
   }, []);
 
   useEffect(() => {
+    if (mode !== "live") {
+      setStatus(IDLE_STATUS);
+      return;
+    }
     refreshStatus();
-    const timer = window.setInterval(refreshStatus, 750);
+    const timer = window.setInterval(refreshStatus, 1500);
     return () => window.clearInterval(timer);
-  }, [refreshStatus]);
+  }, [mode, refreshStatus]);
 
   useEffect(() => {
+    if (mode !== "live") {
+      setPatients(
+        livePatients.map((patient) => ({
+          id: patient.id,
+          full_name: patient.name,
+        }))
+      );
+      setPatientId((current) => current || String(livePatients[0]?.id ?? ""));
+      return;
+    }
     api<Array<{ id: number; full_name: string }>>("/patients")
       .then((items) => {
         setPatients(items);
         setPatientId((current) => current || String(items[0]?.id ?? ""));
       })
       .catch(() => setPatients([]));
-  }, []);
+  }, [mode]);
 
   const releaseBrowserCamera = useCallback(() => {
     if (captureTimer.current !== null) {
