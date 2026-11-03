@@ -1,21 +1,22 @@
 """Local camera/video analysis engine used by the dashboard monitor.
 
-The engine deliberately reuses Physio_AI_Bot's estimators, exercise state
-machines and HUD. The exact OpenCV frame painted by ``hud.draw`` is JPEG
-encoded for the browser, so the desktop and web views share one visual source.
+Analysis is delegated to the ``physiosight`` engine package (pose model,
+spec-driven exercise state machines, renderer, clip recorder, Telegram). This
+module owns what is platform-specific: one job at a time, the browser frame
+source, MJPEG streaming, ownership checks and persisting results.
 """
 from __future__ import annotations
 
-import importlib
 import logging
 import queue
 import secrets
-import sys
+import statistics
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Iterator
 
 from app.core.config import settings
@@ -26,10 +27,11 @@ from app.agents.therapist_agent import summarize
 
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-BOT_ROOT = PROJECT_ROOT / "Physio_AI_Bot"
 DATA_ROOT = PROJECT_ROOT / "backend" / "data"
 UPLOAD_ROOT = DATA_ROOT / "uploads"
 OUTPUT_ROOT = DATA_ROOT / "processed"
+CLIPS_ROOT = DATA_ROOT / "clips"
+CLIP_COOLDOWN_S = 15.0
 
 SUPPORTED_EXERCISES = {"bicep_curl", "squat", "plank", "pushup"}
 ROM_TARGETS = {
@@ -41,77 +43,118 @@ ROM_TARGETS = {
 
 
 class BrowserFrameSource:
-    """Low-latency video source fed by JPEG WebSocket messages."""
+    """Low-latency frame source fed by JPEG WebSocket messages.
+
+    Implements the physiosight FrameSource protocol: ``frames()`` yields
+    ``(t_seconds, frame)``. The timestamp is the server receive time relative
+    to the first frame; the engine is time-based, so the ~10 fps browser
+    stream gives the same decisions as a 30 fps camera.
+    """
+
+    kind = "browser"
 
     def __init__(self, cv2, stop_event: threading.Event):
         self.cv2 = cv2
         self.stop_event = stop_event
-        self.frames: queue.Queue[bytes] = queue.Queue(maxsize=2)
-        self.fps = 10.0
+        self.queue: queue.Queue[tuple[float, bytes]] = queue.Queue(maxsize=2)
+        self.nominal_fps: float | None = 10.0
         self.width = 640
         self.height = 480
         self.label = "Browser camera"
 
-    def push(self, jpeg: bytes) -> None:
+    def push(self, jpeg: bytes, received_at: float | None = None) -> None:
         if self.stop_event.is_set():
             return
-        if self.frames.full():
+        item = (time.monotonic() if received_at is None else received_at, jpeg)
+        if self.queue.full():
             try:
-                self.frames.get_nowait()
+                self.queue.get_nowait()
             except queue.Empty:
                 pass
         try:
-            self.frames.put_nowait(jpeg)
+            self.queue.put_nowait(item)
         except queue.Full:
             pass
 
-    def read(self):
-        np = importlib.import_module("numpy")
+    def frames(self) -> Iterator[tuple[float, object]]:
+        import numpy as np
+
+        t0: float | None = None
+        last_t = -1.0
         while not self.stop_event.is_set():
             try:
-                jpeg = self.frames.get(timeout=0.25)
+                received_at, jpeg = self.queue.get(timeout=0.25)
             except queue.Empty:
                 continue
-            frame = self.cv2.imdecode(
-                np.frombuffer(jpeg, dtype=np.uint8), self.cv2.IMREAD_COLOR
-            )
-            if frame is not None:
-                self.height, self.width = frame.shape[:2]
-                return True, frame
-        return False, None
+            frame = self.cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), self.cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            self.height, self.width = frame.shape[:2]
+            t0 = received_at if t0 is None else t0
+            t = max(received_at - t0, last_t + 1e-3)  # strictly increasing for the pose model
+            last_t = t
+            yield t, frame
 
-    def release(self) -> None:
+    def close(self) -> None:
         self.stop_event.set()
 
 
-def _load_bot_modules():
-    """Import the Bot lazily so the API can still boot without vision extras."""
-    bot_path = str(BOT_ROOT)
-    if bot_path not in sys.path:
-        sys.path.insert(0, bot_path)
+def _load_vision() -> SimpleNamespace:
+    """Import the engine lazily so the API can still boot without vision extras."""
     try:
-        return {
-            "cv2": importlib.import_module("cv2"),
-            "Config": importlib.import_module("config").Config,
-            "VideoSource": importlib.import_module("camera").VideoSource,
-            "PoseEstimator": importlib.import_module("pose_estimator").PoseEstimator,
-            "HandEstimator": importlib.import_module("hand_estimator").HandEstimator,
-            "create_analyzer": importlib.import_module(
-                "exercise_analysis"
-            ).create_analyzer,
-            "ClipRecorder": importlib.import_module("clip_recorder").ClipRecorder,
-            "TelegramNotifier": importlib.import_module(
-                "notifier"
-            ).TelegramNotifier,
-            "hud": importlib.import_module("hud"),
-        }
-    except (ImportError, AttributeError) as exc:
+        import cv2
+
+        from physiosight import i18n
+        from physiosight.capture.sources import CameraSource, VideoFileSource
+        from physiosight.events import FaultDetected
+        from physiosight.exercises.spec import load_spec
+        from physiosight.live import mirror_pose
+        from physiosight.perception.hands import MediaPipeHandBackend
+        from physiosight.perception.mediapipe_backend import MediaPipePoseBackend
+        from physiosight.perception.models import HAND_MODEL, POSE_MODEL, model_path
+        from physiosight.pipeline import Analysis
+        from physiosight.plugins.clips import ClipRecorder
+        from physiosight.plugins.telegram import TelegramNotifier
+        from physiosight.render.overlay import draw_hud, draw_pose
+        from physiosight.session.models import SourceInfo
+    except ImportError as exc:
         logger.exception("Vision module import failed")
         raise RuntimeError(
             "Vision dependencies are unavailable. Install backend/requirements.txt "
-            "and initialise the Physio_AI_Bot submodule. "
+            "(it includes physiosight[mediapipe,notify]). "
             f"Cause: {type(exc).__name__}: {exc}"
         ) from exc
+    return SimpleNamespace(
+        cv2=cv2, i18n=i18n, CameraSource=CameraSource, VideoFileSource=VideoFileSource,
+        FaultDetected=FaultDetected, load_spec=load_spec, mirror_pose=mirror_pose,
+        MediaPipeHandBackend=MediaPipeHandBackend, MediaPipePoseBackend=MediaPipePoseBackend,
+        HAND_MODEL=HAND_MODEL, POSE_MODEL=POSE_MODEL, model_path=model_path, Analysis=Analysis,
+        ClipRecorder=ClipRecorder, TelegramNotifier=TelegramNotifier, draw_hud=draw_hud,
+        draw_pose=draw_pose, SourceInfo=SourceInfo,
+    )
+
+
+def rom_from_session(session, fallback_values: list[float]) -> float:
+    """Range of motion for the dashboard, from per-repetition angle extrema.
+
+    Median over valid repetitions (else all attempts) of the peak flexion
+    (``max_deg`` of the recorded ``*_flexion_*`` angles, 0 deg = full extension),
+    averaged over sides. Falls back to the spread of the live metric when no
+    repetition was attempted, and to its mean for holds (plank body line).
+    """
+    if session.exercise_kind == "hold":
+        return round(statistics.fmean(fallback_values), 1) if fallback_values else 0.0
+    reps = [r for r in session.reps if r.outcome == "valid"] or list(session.reps)
+    per_rep = []
+    for rep in reps:
+        peaks = [a.max_deg for name, a in rep.angles.items() if "flexion" in name]
+        if peaks:
+            per_rep.append(statistics.fmean(peaks))
+    if per_rep:
+        return round(statistics.median(per_rep), 1)
+    if len(fallback_values) > 1:
+        return round(max(fallback_values) - min(fallback_values), 1)
+    return round(fallback_values[0], 1) if fallback_values else 0.0
 
 
 class MonitorEngine:
@@ -332,42 +375,76 @@ class MonitorEngine:
         track_arm: str,
         patient_id: int | None,
     ) -> None:
-        source = pose = hand_pose = writer = None
+        source = pose = hand_pose = writer = notifier = None
         try:
-            modules = _load_bot_modules()
-            cv2 = modules["cv2"]
-            cfg = modules["Config"]()
-            cfg.exercise = exercise
-            cfg.track_arm = track_arm
-
-            if not Path(cfg.model_path).is_file():
-                raise RuntimeError(f"Pose model was not found: {cfg.model_path}")
+            v = _load_vision()
+            cv2 = v.cv2
+            spec, spec_sha = v.load_spec(exercise, track_arm if exercise == "bicep_curl" else None)
 
             if source_kind == "browser":
                 source = BrowserFrameSource(cv2, self._stop_event)
                 with self._lock:
                     self._browser_source = source
+            elif source_kind == "camera":
+                source = v.CameraSource(int(source_value or 0))
             else:
-                source = modules["VideoSource"].open(source_value, cfg.camera_index)
-            pose = modules["PoseEstimator"](cfg.model_path)
-            if cfg.enable_hand_tracking and Path(cfg.hand_model_path).is_file():
-                hand_pose = modules["HandEstimator"](cfg.hand_model_path)
-            analyzer = modules["create_analyzer"](exercise, cfg, track_arm)
-            recorder = modules["ClipRecorder"](
-                cfg.clips_dir, source.fps, cfg.clip_buffer_seconds
+                source = v.VideoFileSource(str(source_value))
+            pose = v.MediaPipePoseBackend(str(v.model_path(v.POSE_MODEL)))
+            try:
+                hand_pose = v.MediaPipeHandBackend(str(v.model_path(v.HAND_MODEL)))
+            except (FileNotFoundError, AttributeError):
+                hand_pose = None
+
+            analysis = v.Analysis(
+                spec,
+                spec.default_target,
+                source=v.SourceInfo(
+                    kind="video" if source_kind == "upload" else "camera",
+                    width=source.width or None,
+                    height=source.height or None,
+                    nominal_fps=source.nominal_fps,
+                ),
+                pose_backend=pose.name,
+                pose_backend_version=pose.version,
+                spec_sha256=spec_sha,
             )
-            notifier = modules["TelegramNotifier"](
-                settings.PHYSIO_TG_TOKEN or cfg.telegram_token,
-                settings.PHYSIO_TG_CHAT or cfg.telegram_chat_id,
+            analyzer = analysis.analyzer
+            exercise_name = v.i18n.text(spec.name_key, "en")
+            unit = "sec" if spec.kind == "hold" else "reps"
+            notifier = v.TelegramNotifier(
+                settings.PHYSIO_TG_TOKEN or None, settings.PHYSIO_TG_CHAT or None
             )
+            fps = source.nominal_fps or 10.0
+            recorder = v.ClipRecorder(
+                CLIPS_ROOT,
+                fps,
+                cooldown_s=CLIP_COOLDOWN_S,
+                on_saved=lambda path, ev: notifier.send_video(
+                    path,
+                    caption=(
+                        f"PhysioVision alert: {exercise_name} - "
+                        f"{v.i18n.text('fault.' + ev.code, 'en')}. Please review."
+                    ),
+                ),
+            )
+            recorder.attach(analysis.bus)
+            faults: set[str] = set()
+            last_fault_time = 0.0
+
+            def on_fault(ev) -> None:
+                nonlocal last_fault_time
+                faults.add(ev.code)
+                last_fault_time = time.time()
+
+            analysis.bus.subscribe(v.FaultDetected, on_fault)
 
             if source_kind == "upload":
                 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
                 result_path = OUTPUT_ROOT / f"{self._status['job_id']}.webm"
                 writer = cv2.VideoWriter(
                     str(result_path),
-                    cv2.VideoWriter_fourcc(*"VP80"),
-                    source.fps,
+                    cv2.VideoWriter.fourcc(*"VP80"),
+                    fps,
                     (source.width, source.height),
                 )
                 if not writer.isOpened():
@@ -381,103 +458,75 @@ class MonitorEngine:
                         "phase": "running",
                         "source_label": source.label,
                         "target": float(analyzer.target),
-                        "unit": analyzer.unit,
+                        "unit": unit,
                         "telegram_enabled": notifier.enabled,
                     }
                 )
             notifier.send_message(
-                f"PhysioVision: {analyzer.name} session started "
-                f"({source.label})."
+                f"PhysioVision: {exercise_name} session started ({source.label})."
             )
 
-            form_status = "Step into view of the camera"
-            form_ok = True
-            metric_label = ""
-            metric_value = None
-            last_fault_time = 0.0
-            last_alert_by_fault: dict[str, float] = {}
             notified_complete = False
-            frame_interval = 1.0 / max(1.0, source.fps)
+            frame_interval = 1.0 / max(1.0, fps)
             started_at = datetime.now(timezone.utc)
-            analyzed_frames = 0
-            good_frames = 0
-            fault_frames = 0
+            analyzed_frames = good_frames = fault_frames = 0
             metric_values: list[float] = []
-            faults: set[str] = set()
 
-            while not self._stop_event.is_set():
-                loop_started = time.monotonic()
-                ok, frame = source.read()
-                if not ok:
+            for t, frame in source.frames():
+                if self._stop_event.is_set():
                     break
-                if source_kind == "camera":
-                    frame = cv2.flip(frame, 1)
-
-                landmarks = pose.estimate(frame)
-                hand_landmarks = hand_pose.estimate(frame) if hand_pose else []
-                if landmarks is not None and not analyzer.is_complete:
-                    result = analyzer.update(landmarks)
+                loop_started = time.monotonic()
+                landmarks = pose.process(frame, t)
+                hands = hand_pose.process(frame, t) if hand_pose else []
+                result = analysis.step(t, landmarks)
+                if result is None:
+                    break
+                if landmarks is not None:
                     analyzed_frames += 1
-                    metric_label = result.metric_label
-                    metric_value = result.metric_value
-                    form_ok = result.form_ok
-                    form_status = result.status
                     good_frames += int(result.form_ok)
                     fault_frames += int(not result.form_ok)
                     if result.metric_value is not None:
                         metric_values.append(float(result.metric_value))
-                    if result.fault:
-                        faults.add(result.fault)
-                        fault_time = time.time()
-                        last_fault_time = fault_time
-                        previous_alert = last_alert_by_fault.get(
-                            result.fault, 0.0
-                        )
-                        if fault_time - previous_alert >= 15.0:
-                            clip_path = recorder.save(result.fault)
-                            if clip_path:
-                                notifier.send_video(
-                                    clip_path,
-                                    caption=(
-                                        f"PhysioVision alert: {analyzer.name} - "
-                                        f"{result.status}. Please review."
-                                    ),
-                                )
-                                last_alert_by_fault[result.fault] = fault_time
-                elif landmarks is None and not analyzer.is_complete:
-                    form_status = "Step into view of the camera"
-                    form_ok = True
+                    form_status = v.i18n.text(
+                        result.hint_key, "en",
+                        progress=int(result.progress) if unit == "reps" else result.progress,
+                        target=analyzer.target,
+                    )
+                    form_ok = result.form_ok
+                else:
+                    form_status, form_ok = "Step into view of the camera", True
+                metric_label = (
+                    v.i18n.text(result.metric_label_key, "en") if result.metric_label_key else ""
+                )
 
-                recorder.add(frame)
+                # The camera view is mirrored for display only; analysis used the
+                # original frame so left/right stay anatomical.
+                mirror = source_kind == "camera"
+                view = cv2.flip(frame, 1) if mirror else frame.copy()
+                width = view.shape[1]
+                shown_pose = v.mirror_pose(landmarks, width) if mirror else landmarks
+                shown_hands = (
+                    [h.copy() for h in hands] if not mirror
+                    else [_mirror_points(h, width) for h in hands]
+                )
+                v.draw_pose(view, shown_pose, shown_hands)
+                recorder.add(view)
+                v.draw_hud(
+                    view, result, exercise_name, analyzer.target, unit,
+                    fault_active=time.time() - last_fault_time < 1.0,
+                    complete=analyzer.is_complete,
+                )
+
                 if analyzer.is_complete and not notified_complete:
                     notifier.send_message(
-                        f"PhysioVision workout complete: {analyzer.name} "
-                        f"{analyzer.progress:.1f}/{analyzer.target:g} "
-                        f"{analyzer.unit}."
+                        f"PhysioVision workout complete: {exercise_name} "
+                        f"{analyzer.progress:g}/{analyzer.target:g} {unit}."
                     )
                     notified_complete = True
-                state = modules["hud"].HudState(
-                    exercise=analyzer.name,
-                    progress=analyzer.progress,
-                    target=analyzer.target,
-                    unit=analyzer.unit,
-                    arm=track_arm,
-                    metric_label=metric_label,
-                    metric_value=metric_value,
-                    form_status=form_status,
-                    form_ok=form_ok,
-                    complete=analyzer.is_complete,
-                    fault_active=(time.time() - last_fault_time < 1.0),
-                    landmarks=landmarks,
-                    hand_landmarks=hand_landmarks,
-                )
-                modules["hud"].draw(frame, state)
 
                 if writer:
-                    writer.write(frame)
-                encoded, jpeg = cv2.imencode(
-                    ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                )
+                    writer.write(view)
+                encoded, jpeg = cv2.imencode(".jpg", view, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if encoded:
                     with self._frame_ready:
                         self._latest_jpeg = jpeg.tobytes()
@@ -488,8 +537,8 @@ class MonitorEngine:
                                 "form_ok": form_ok,
                                 "metric_label": metric_label,
                                 "metric_value": (
-                                    round(float(metric_value), 1)
-                                    if metric_value is not None
+                                    round(float(result.metric_value), 1)
+                                    if result.metric_value is not None
                                     else None
                                 ),
                                 "complete": bool(analyzer.is_complete),
@@ -500,43 +549,33 @@ class MonitorEngine:
                         )
                         self._frame_ready.notify_all()
 
-                if analyzer.is_complete:
+                if analysis.done:
                     break
-
                 if source_kind == "upload":
+                    # pace uploads like a live stream for the dashboard; analysis itself
+                    # uses the video's own timestamps, not this wall-clock pacing
                     elapsed = time.monotonic() - loop_started
                     self._stop_event.wait(max(0.0, frame_interval - elapsed))
 
             if writer is not None:
                 writer.release()
                 writer = None
-            workout_completed = bool(analyzer.is_complete)
+            session = analysis.finish()
+            workout_completed = bool(session.summary.completed)
             valid_data = analyzed_frames > 0 and float(analyzer.progress) > 0
             session_completed = workout_completed or (
                 source_kind == "upload" and not self._stop_event.is_set()
             )
-            completion = min(
-                1.0,
-                float(analyzer.progress) / max(1.0, float(analyzer.target)),
-            )
+            completion = min(1.0, float(analyzer.progress) / max(1.0, float(analyzer.target)))
             form_ratio = good_frames / max(1, analyzed_frames)
             quality = round(100 * (0.7 * form_ratio + 0.3 * completion), 1)
             compensation = bool(faults)
-            fatigue = round(
-                min(100.0, 100.0 * fault_frames / max(1, analyzed_frames)),
-                1,
-            )
-            if exercise == "plank" and metric_values:
-                rom_achieved = round(sum(metric_values) / len(metric_values), 1)
-            else:
-                rom_achieved = (
-                    round(max(metric_values) - min(metric_values), 1)
-                    if len(metric_values) > 1
-                    else round(metric_values[0], 1) if metric_values else 0.0
-                )
+            # NOTE: historically named "fatigue"; it is the share of analysed frames
+            # with a form problem, not a fatigue measure.
+            fatigue = round(min(100.0, 100.0 * fault_frames / max(1, analyzed_frames)), 1)
             telemetry = {
                 "movement_quality_score": quality,
-                "rom_achieved_deg": rom_achieved,
+                "rom_achieved_deg": rom_from_session(session, metric_values),
                 "rom_target_deg": ROM_TARGETS[exercise],
                 "total_reps": int(analyzer.progress),
                 "fatigue_index": fatigue,
@@ -568,6 +607,7 @@ class MonitorEngine:
                 therapist=therapist,
                 valid_data=valid_data,
                 clinic_id=self._status.get("_owner_clinic_id"),
+                analysis=session.model_dump(mode="json"),
             )
             with self._frame_ready:
                 self._status["phase"] = (
@@ -591,16 +631,17 @@ class MonitorEngine:
                 )
                 self._frame_ready.notify_all()
         except Exception as exc:
+            logger.exception("Monitoring job failed")
             with self._frame_ready:
                 self._status.update({"phase": "error", "error": str(exc)})
                 self._frame_ready.notify_all()
         finally:
-            if "notifier" in locals():
+            if notifier is not None:
                 notifier.flush(timeout=15)
             if writer is not None:
                 writer.release()
             if source is not None:
-                source.release()
+                source.close()
             if pose is not None:
                 pose.close()
             if hand_pose is not None:
@@ -653,6 +694,7 @@ class MonitorEngine:
         therapist: dict | None,
         valid_data: bool,
         clinic_id: int | None,
+        analysis: dict | None = None,
     ) -> int | None:
         if patient_id is None:
             return None
@@ -686,6 +728,7 @@ class MonitorEngine:
                 rom_achieved_deg=telemetry["rom_achieved_deg"],
                 rom_target_deg=telemetry["rom_target_deg"],
                 evidence_clip_url=f"exercise:{exercise}",
+                analysis=analysis,
             )
             db.add(row)
             db.flush()
@@ -704,6 +747,12 @@ class MonitorEngine:
                 )
             db.commit()
             return row.id
+
+
+def _mirror_points(points, width: int):
+    out = points.copy()
+    out[:, 0] = width - out[:, 0]
+    return out
 
 
 monitor_engine = MonitorEngine()
