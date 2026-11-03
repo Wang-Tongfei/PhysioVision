@@ -48,18 +48,15 @@ PhysioVision/
 │       ├── services/     业务服务
 │       ├── agents/       规则分析和 Agent 原型
 │       └── core/         配置、数据库和安全模块
-├── Physio_AI_Bot/        本地动作监测程序
 ├── docs/                 当前架构和 API 说明
 └── start.bat             前端开发服务器启动脚本
 ```
 
-`Physio_AI_Bot` 作为 Git 子模块维护。首次克隆时请使用：
-
-```powershell
-git clone --recurse-submodules <repository-url>
-```
-
-已有工作副本可运行 `git submodule update --init --recursive`。
+动作分析引擎是独立的 Python 包
+[`physiosight`](https://github.com/Wang-Tongfei/PhysioSight)，由
+`backend/requirements.txt` 按固定提交安装（`physiosight[mediapipe,notify] @ git+...`），
+不再使用 Git 子模块。升级引擎时修改该提交号，并对照引擎仓库的
+`docs/BEHAVIOR_CHANGES.md`。安装需要本机有 `git`。
 
 ## 页面
 
@@ -115,9 +112,11 @@ python main.py
 1. 选择 Bicep curl、Squat、Plank 或 Push-up。
 2. 点击 **Live Camera** 使用后端电脑的摄像头。
 3. 或点击 **Upload Video** 上传已有训练视频。
-4. 面板会显示患者真实画面，以及 `Physio_AI_Bot` 绘制的同一套身体骨架、
+4. 面板会显示患者画面（头部用椭圆遮挡），以及 `physiosight` 绘制的身体骨架、
    手部关键点、次数、关节角度、动作提示和错误红框。
 5. 上传视频分析结束后可在面板内回放处理后的视频。
+6. 关联患者的会话会保存引擎输出的完整 Session 文档（每次重复的结果、错误码和
+   关节角度），可通过 `GET /api/v1/sessions/{id}/analysis` 获取。
 
 当前版本一次只运行一个视觉任务。摄像头是运行 FastAPI 的电脑所连接的
 摄像头，不是浏览器所在设备的摄像头。上传上限为 500 MB；上传原文件会
@@ -157,14 +156,13 @@ PHYSIO_TG_CHAT=your-chat-id
 
 ### 本地动作监测
 
-具体环境配置和快捷键见 `Physio_AI_Bot/README.md`。
+不依赖平台的本地监测程序就是引擎包自带的命令行，环境配置和快捷键见
+[PhysioSight README](https://github.com/Wang-Tongfei/PhysioSight)。
 
 ```powershell
-cd Physio_AI_Bot
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python physio_form_monitor.py
+pip install "physiosight[mediapipe,notify] @ git+https://github.com/Wang-Tongfei/PhysioSight@b8d2930fd2510b60a7448f407051947e0f9eeb78"
+physiosight run            # 摄像头
+physiosight run video.mp4 -e squat
 ```
 
 也可以把视频路径作为参数传入。
