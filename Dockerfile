@@ -8,7 +8,10 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        git \
+        libegl1 \
         libgl1 \
+        libgles2 \
         libglib2.0-0 \
         libgomp1 \
         libsm6 \
@@ -20,7 +23,6 @@ COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/ backend/
-COPY Physio_AI_Bot/ Physio_AI_Bot/
 
 WORKDIR /app/backend
 
