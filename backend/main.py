@@ -23,6 +23,10 @@ async def lifespan(app: FastAPI):
     # replace this with versioned Alembic migrations.
     Base.metadata.create_all(bind=engine)
     if engine.dialect.name == "sqlite":
+        session_columns = {column["name"] for column in inspect(engine).get_columns("rehab_sessions")}
+        if "analysis" not in session_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE rehab_sessions ADD COLUMN analysis JSON"))
         columns = {column["name"] for column in inspect(engine).get_columns("exercises")}
         if "clinic_id" not in columns:
             with engine.begin() as connection:

@@ -37,6 +37,8 @@ class RehabSession(Base):
     rom_achieved_deg = Column(Float)
     rom_target_deg = Column(Float)
     evidence_clip_url = Column(String(256))       # MinIO object key
+    # Full physiosight Session document (schema: physiosight.session.models.Session)
+    analysis = Column(JSON)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

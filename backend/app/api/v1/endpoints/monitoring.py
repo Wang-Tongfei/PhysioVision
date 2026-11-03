@@ -77,6 +77,21 @@ def completed_sessions(
     ]
 
 
+@router.get("/{session_id}/analysis")
+def session_analysis(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """The engine's full Session document (per-repetition outcomes, faults, angles)."""
+    row = db.get(RehabSession, session_id)
+    if row is None or row.patient is None or row.patient.clinic_id != user.clinic_id:
+        raise HTTPException(404, "Session not found")
+    if row.analysis is None:
+        raise HTTPException(404, "No engine analysis stored for this session")
+    return row.analysis
+
+
 @router.get("/monitor/status")
 def monitor_status(user: User = Depends(current_user)):
     return monitor_engine.status_for(user.id, user.clinic_id)
