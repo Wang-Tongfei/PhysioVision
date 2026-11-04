@@ -11,7 +11,7 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 httpx==0.27.0
 # Vision engine (pose model, exercise analysis, renderer, clips, Telegram). Pinned to a
-# commit until PhysioSight publishes a release tag; bump deliberately (see its BEHAVIOR_CHANGES.md).
-physiosight[mediapipe,notify] @ git+https://github.com/Wang-Tongfei/PhysioSight@b8d2930fd2510b60a7448f407051947e0f9eeb78
+# release tag; bump deliberately and read its docs/BEHAVIOR_CHANGES.md first.
+physiosight[mediapipe,notify] @ git+https://github.com/Wang-Tongfei/PhysioSight@v0.1.0
 numpy>=1.26.0
 requests>=2.31.0
