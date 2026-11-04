@@ -5,7 +5,7 @@ import {
   Alert, Box, Button, Chip, FormControlLabel, Grid, Snackbar,
   Stack, Switch, TextField, Typography,
 } from "@mui/material";
-import { CloudDone, IntegrationInstructions, Save } from "@mui/icons-material";
+import { CloudDone, Save } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import { usePersistentState } from "@/lib/usePersistentState";
 import { api } from "@/lib/api";
@@ -177,24 +177,11 @@ export default function SettingsPage() {
       },
     });
 
-  const integrationRows = [
-    {
-      name: "FHIR R4",
-      description: "Exchange DocumentReference resources",
-      configured: Boolean(draft.fhirEndpoint),
-    },
-    {
-      name: "HL7 v2",
-      description: "ADT / ORU lab feeds",
-      configured: Boolean(draft.hl7Endpoint),
-    },
-  ];
-
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={2} mb={3}>
         <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
-          Settings & Clinic Management
+          Settings
         </Typography>
         <Button disabled={loading} variant="contained" startIcon={<Save />} onClick={save} sx={{ alignSelf: { xs: "stretch", sm: "center" }, flexShrink: 0 }}>
           Save Changes
@@ -213,51 +200,13 @@ export default function SettingsPage() {
                   <Chip
                     icon={<CloudDone />}
                     label={mode === "demo" ? "Demo profile" : "Database Sync: Active"}
-                    sx={{ bgcolor: "rgba(16,217,126,0.12)", color: "#10d97e", border: "1px solid rgba(16,217,126,0.3)" }}
+                    sx={{ bgcolor: "rgba(21,128,61,0.12)", color: "#15803D", border: "1px solid rgba(21,128,61,0.3)" }}
                   />
                 </Box>
               </Stack>
             </SectionCard>
 
-            <SectionCard title="Integrations" subtitle="Hospital EMR connectivity">
-              <Stack spacing={1.5}>
-                {integrationRows.map(({ name, description, configured }) => (
-                  <Stack key={name} direction="row" alignItems="center" spacing={1}>
-                    <IntegrationInstructions sx={{ color: configured ? "#22d3ee" : "text.secondary" }} />
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
-                      <Typography variant="caption" sx={{ color: "text.secondary" }}>{description}</Typography>
-                    </Box>
-                    <Chip
-                      label={configured ? "Configured" : "Not configured"}
-                      size="small"
-                      sx={{
-                        bgcolor: configured ? "rgba(16,217,126,0.12)" : "rgba(148,163,184,0.12)",
-                        color: configured ? "#10d97e" : "text.secondary",
-                      }}
-                    />
-                  </Stack>
-                ))}
-                <TextField
-                  disabled={loading}
-                  size="small"
-                  label="FHIR Endpoint"
-                  placeholder="Not configured"
-                  value={draft.fhirEndpoint}
-                  onChange={(e) => setDraft({ ...draft, fhirEndpoint: e.target.value })}
-                  sx={fieldSx}
-                />
-              </Stack>
-            </SectionCard>
 
-            <SectionCard title="Edge Fleet" subtitle="Raspberry Pi nodes">
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {(mode === "demo" ? ["pi-cam-01", "pi-cam-02", "pi-cam-03", "pi-cam-04"] : []).map((node) => (
-                  <Chip key={node} label={`${node} · online`} size="small" sx={{ bgcolor: "rgba(16,217,126,0.12)", color: "#10d97e" }} />
-                ))}
-                {mode === "live" && <Typography color="text.secondary">No edge nodes registered.</Typography>}
-              </Stack>
-            </SectionCard>
           </Stack>
         </Grid>
 
@@ -266,27 +215,14 @@ export default function SettingsPage() {
             <SectionCard title="Notifications" subtitle="Alert delivery channels">
               <Stack spacing={1}>
                 {([
-                  ["telegram", "Telegram alerts (Risk Agent)"],
+                  ["telegram", "Telegram alerts (fault clips and session summaries)"],
                   ["banners", "Dashboard banners"],
-                  ["sms", "SMS to therapist on critical"],
-                  ["digest", "Weekly progress digest"],
                 ] as const).map(([key, label]) => (
                   <FormControlLabel key={key} control={<Switch checked={draft.notifications[key]} onChange={() => toggleNotification(key)} />} label={label} />
                 ))}
               </Stack>
             </SectionCard>
 
-            <SectionCard title="AI Agents" subtitle="Enable / disable agent pipeline">
-              <Stack spacing={1}>
-                {Object.entries(draft.agents).map(([name, enabled]) => (
-                  <FormControlLabel
-                    key={name}
-                    control={<Switch checked={enabled} onChange={() => setDraft({ ...draft, agents: { ...draft.agents, [name]: !enabled } })} />}
-                    label={name}
-                  />
-                ))}
-              </Stack>
-            </SectionCard>
           </Stack>
         </Grid>
       </Grid>
@@ -302,9 +238,9 @@ export default function SettingsPage() {
 
 const fieldSx = {
   "& .MuiOutlinedInput-root": {
-    "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
-    "&:hover fieldset": { borderColor: "rgba(34,211,238,0.5)" },
-    "&.Mui-focused fieldset": { borderColor: "#22d3ee" },
-    background: "rgba(11,30,51,0.5)",
+    "& fieldset": { borderColor: "rgba(15,118,110,0.25)" },
+    "&:hover fieldset": { borderColor: "rgba(15,118,110,0.5)" },
+    "&.Mui-focused fieldset": { borderColor: "#0F766E" },
+    background: "#F8FAFC",
   },
 };

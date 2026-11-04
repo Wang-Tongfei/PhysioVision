@@ -137,45 +137,42 @@ export default function LoginPage() {
           p: 4,
           position: "relative",
           background:
-            "radial-gradient(ellipse at 30% 20%, rgba(34,211,238,0.25), transparent 60%), linear-gradient(160deg, #06243e 0%, #04101f 100%)",
-          borderRight: "1px solid rgba(34,211,238,0.15)",
+            "#EAF3F2",
+          borderRight: "1px solid rgba(15,118,110,0.15)",
         }}
       >
-        <Box className="glow-blob" sx={{ width: 360, height: 360, background: "rgba(34,211,238,0.3)", top: -80, left: -60 }} />
+        <Box className="glow-blob" sx={{ width: 360, height: 360, background: "rgba(15,118,110,0.3)", top: -80, left: -60 }} />
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1, textDecoration: "none", color: "inherit" }}>
           <Box
             sx={{
               width: 40,
               height: 40,
               borderRadius: 2,
-              background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
+              background: "#0F766E",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <MonitorHeart sx={{ color: "#04101f", fontSize: 24 }} />
+            <MonitorHeart sx={{ color: "#FFFFFF", fontSize: 24 }} />
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 22 }}>
-            Physio<span style={{ color: "#22d3ee" }}>Vision</span>
+            Physio<span style={{ color: "#0F766E" }}>Vision</span>
           </Typography>
         </Link>
 
         <Box sx={{ position: "relative", zIndex: 1 }}>
           <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.15, mb: 2 }}>
-            Welcome back to your
-            <Box component="span" className="text-gradient">
-              {" "}clinic cockpit
-            </Box>
+            Welcome back
           </Typography>
           <Typography sx={{ color: "text.secondary", maxWidth: 420 }}>
-            Sign in to monitor live sessions, review AI reports, and keep every
-            patient on track — all from one intelligent dashboard.
+            Sign in to monitor live sessions, review reports, and keep every
+            patient on track.
           </Typography>
         </Box>
 
         <Box sx={{ position: "relative", zIndex: 1, display: "flex", gap: 1 }}>
-          {["Live monitoring", "AI reports", "Risk alerts"].map((b) => (
+          {["Session history", "Progress trends", "SOAP drafts"].map((b) => (
             <Box key={b} className="badge badge-info">
               {b}
             </Box>
@@ -199,7 +196,7 @@ export default function LoginPage() {
           </Typography>
           <Typography sx={{ color: "text.secondary", mb: 2 }}>
             Don&apos;t have an account?{" "}
-            <Link href="/register" style={{ color: "#22d3ee", textDecoration: "none", fontWeight: 600 }}>
+            <Link href="/register" style={{ color: "#0F766E", textDecoration: "none", fontWeight: 600 }}>
               Create one
             </Link>
           </Typography>
@@ -217,10 +214,10 @@ export default function LoginPage() {
               sx={{
                 mb: 1.5,
                 "& .MuiOutlinedInput-root": {
-                  "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
-                  "&:hover fieldset": { borderColor: "rgba(34,211,238,0.5)" },
-                  "&.Mui-focused fieldset": { borderColor: "#22d3ee" },
-                  background: "rgba(11,30,51,0.5)",
+                  "& fieldset": { borderColor: "rgba(15,118,110,0.25)" },
+                  "&:hover fieldset": { borderColor: "rgba(15,118,110,0.5)" },
+                  "&.Mui-focused fieldset": { borderColor: "#0F766E" },
+                  background: "#F8FAFC",
                 },
               }}
               InputProps={{
@@ -245,10 +242,10 @@ export default function LoginPage() {
               sx={{
                 mb: 1,
                 "& .MuiOutlinedInput-root": {
-                  "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
-                  "&:hover fieldset": { borderColor: "rgba(34,211,238,0.5)" },
-                  "&.Mui-focused fieldset": { borderColor: "#22d3ee" },
-                  background: "rgba(11,30,51,0.5)",
+                  "& fieldset": { borderColor: "rgba(15,118,110,0.25)" },
+                  "&:hover fieldset": { borderColor: "rgba(15,118,110,0.5)" },
+                  "&.Mui-focused fieldset": { borderColor: "#0F766E" },
+                  background: "#F8FAFC",
                 },
               }}
               InputProps={{
@@ -269,10 +266,10 @@ export default function LoginPage() {
 
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
               <FormControlLabel
-                control={<Checkbox size="small" sx={{ color: "#22d3ee" }} defaultChecked />}
+                control={<Checkbox size="small" sx={{ color: "#0F766E" }} defaultChecked />}
                 label={<Typography variant="caption" sx={{ color: "text.secondary" }}>Remember me</Typography>}
               />
-              <Button variant="text" size="small" onClick={() => setForgotOpen(true)} sx={{ color: "#22d3ee", textTransform: "none", fontSize: 13, fontWeight: 600 }}>
+              <Button variant="text" size="small" onClick={() => setForgotOpen(true)} sx={{ color: "#0F766E", textTransform: "none", fontSize: 13, fontWeight: 600 }}>
                 Forgot password?
               </Button>
             </Box>

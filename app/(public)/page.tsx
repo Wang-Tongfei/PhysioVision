@@ -1,483 +1,186 @@
 "use client";
 
-import React from "react";
 import Link from "next/link";
+import { Box, Button, Chip, Container, Divider, Grid, Paper, Stack, Typography } from "@mui/material";
 import {
-  Box,
-  Typography,
-  Container,
-  Button,
-  Stack,
-  useTheme,
-} from "@mui/material";
-import {
-  MonitorHeart,
-  Psychology,
-  Timeline,
-  Groups,
-  Security,
   ArrowForward,
-  PlayCircle,
-  CheckCircle,
-  AutoGraph,
-  HealthAndSafety,
+  CloudUploadOutlined,
+  FactCheckOutlined,
+  InsightsOutlined,
+  VideocamOutlined,
 } from "@mui/icons-material";
+import { Brand } from "@/components/layout/DashboardLayout";
+import { tokens } from "@/app/theme";
 
-const features = [
+const steps = [
   {
-    icon: <Psychology sx={{ fontSize: 32 }} />,
-    title: "6-AI-Agent Engine",
-    desc: "Movement analysis, risk prediction, coaching, SOAP notes, and analytics — coordinated by LangGraph.",
+    icon: <VideocamOutlined />,
+    title: "Record at home",
+    text: "The patient exercises in front of an ordinary webcam. The open-source PhysioSight engine tracks the body on their own device and checks every repetition against the prescribed movement.",
   },
   {
-    icon: <MonitorHeart sx={{ fontSize: 32 }} />,
-    title: "Real-Time Monitoring",
-    desc: "Multi-patient live pose tracking at the edge via Raspberry Pi 5 with YOLO11 + MediaPipe.",
+    icon: <CloudUploadOutlined />,
+    title: "Upload a session",
+    text: "Each set becomes one Session file: every attempt, whether it counted, why not, and the joint angles reached. No video and no identity leave the device.",
   },
   {
-    icon: <Timeline sx={{ fontSize: 32 }} />,
-    title: "Progress Trends",
-    desc: "Joint-angle ROM, adherence, and rehab velocity visualized with interactive ECharts.",
-  },
-  {
-    icon: <HealthAndSafety sx={{ fontSize: 32 }} />,
-    title: "Risk Alerts",
-    desc: "Compensatory-movement detection flags patients before setbacks occur.",
-  },
-  {
-    icon: <Groups sx={{ fontSize: 32 }} />,
-    title: "Clinic-Wide View",
-    desc: "Cohort KPIs, therapist workload, and scheduling in one dashboard.",
-  },
-  {
-    icon: <Security sx={{ fontSize: 32 }} />,
-    title: "FHIR / HL7 Ready",
-    desc: "Standards-based integration with your EHR and wearable data streams.",
+    icon: <InsightsOutlined />,
+    title: "Review progress",
+    text: "You see range of motion over time, repetitions counted versus attempted, recurring faults and per-repetition detail, and can draft a SOAP note from any session.",
   },
 ];
 
-const stats = [
-  { value: "94%", label: "Adherence Rate" },
-  { value: "2.3×", label: "Faster Recovery" },
-  { value: "6", label: "AI Agents" },
-  { value: "24/7", label: "Monitoring" },
+const measures = [
+  ["Repetitions with reasons", "Valid, invalid or aborted, with fault codes such as “not deep enough”, “moved too fast” or “upper arm drifted”."],
+  ["Peak flexion per repetition", "Joint angles from body keypoints, recorded per side, compared with the exercise target."],
+  ["Within-set velocity loss", "How much repetitions slow down across a set, a common fatigue indicator in resistance training."],
+  ["Data quality", "Share of frames with reliable tracking, and whether the camera view suits the angle being measured."],
 ];
 
-const testimonials = [
-  {
-    quote:
-      "PhysioVision cut our documentation time in half and our patients actually do their exercises now.",
-    name: "Dr. Sarah Kim",
-    role: "Lead Physical Therapist",
-  },
-  {
-    quote:
-      "The risk alerts caught a compensation pattern we'd have missed for weeks. Game changer.",
-    name: "James O.",
-    role: "Sports Rehab Clinic Director",
-  },
-];
+const exercises = ["Squat", "Bicep curl", "Push-up", "Plank", "Shoulder flexion"];
 
-const LANDING_PAGE_SCALE = 1.1;
-
-export default function LandingPage() {
-  const theme = useTheme();
-
+function SampleSession() {
+  const rows = [
+    ["1", "valid", "97°", "—"],
+    ["2", "valid", "95°", "—"],
+    ["3", "invalid", "74°", "Not deep enough"],
+    ["4", "valid", "96°", "—"],
+  ];
   return (
-    <Box
-      sx={{
-        position: "relative",
-        overflow: "hidden",
-        width: `calc(100% / ${LANDING_PAGE_SCALE})`,
-        mx: "auto",
-        zoom: LANDING_PAGE_SCALE,
-      }}
-    >
-      {/* Glow blobs */}
-      <Box
-        className="glow-blob"
-        sx={{ width: 500, height: 500, background: "rgba(34,211,238,0.35)", top: -150, left: -100 }}
-      />
-      <Box
-        className="glow-blob"
-        sx={{ width: 420, height: 420, background: "rgba(59,130,246,0.3)", top: 200, right: -120 }}
-      />
+    <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+        <Typography variant="subtitle2">Squat · 3 of 4 counted</Typography>
+        <Typography variant="caption" color="text.secondary">example data</Typography>
+      </Stack>
+      <Box component="table" sx={{ width: "100%", mt: 1.5, borderCollapse: "collapse", fontSize: 13,
+        "& th": { textAlign: "left", color: "text.secondary", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", pb: 1 },
+        "& td": { py: 1, borderTop: `1px solid ${tokens.line}` } }}>
+        <thead><tr><th>#</th><th>Outcome</th><th>Peak knee flexion</th><th>Fault</th></tr></thead>
+        <tbody>
+          {rows.map(([i, outcome, angle, fault]) => (
+            <tr key={i}>
+              <td>{i}</td>
+              <td><Chip size="small" variant="outlined" color={outcome === "valid" ? "success" : "warning"} label={outcome} /></td>
+              <td>{angle}</td>
+              <td style={{ color: fault === "—" ? tokens.muted : tokens.ink }}>{fault}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Box>
+    </Paper>
+  );
+}
 
-      {/* ===== Navbar ===== */}
-      <Box
-        component="header"
-        className="topbar"
-        sx={{ position: "sticky", top: 0, zIndex: 100, px: { xs: 2, md: 6 }, py: 1.8 }}
-      >
-        <Container maxWidth="xl" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                borderRadius: 2,
-                background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 4px 18px rgba(34,211,238,0.45)",
-              }}
-            >
-              <MonitorHeart sx={{ color: "#04101f", fontSize: 22 }} />
-            </Box>
-            <Typography sx={{ fontWeight: 800, fontSize: 22 }}>
-              Physio<span style={{ color: "#22d3ee" }}>Vision</span>
+export default function HomePage() {
+  return (
+    <Box sx={{ bgcolor: "background.default", minHeight: "100vh" }}>
+      <Box component="header" sx={{ borderBottom: `1px solid ${tokens.line}`, bgcolor: "background.paper" }}>
+        <Container maxWidth="lg" sx={{ height: 64, display: "flex", alignItems: "center", gap: 3 }}>
+          <Brand />
+          <Box sx={{ flexGrow: 1 }} />
+          <Stack direction="row" spacing={3} sx={{ display: { xs: "none", md: "flex" }, "& a": { color: "text.secondary", textDecoration: "none", fontSize: 14, fontWeight: 500 } }}>
+            <a href="#how">How it works</a>
+            <a href="#measures">What it measures</a>
+            <a href="#limits">Limitations</a>
+          </Stack>
+          <Button component={Link} href="/login" variant="outlined">Sign in</Button>
+        </Container>
+      </Box>
+
+      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 10 } }}>
+        <Grid container spacing={6} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <Typography variant="overline" sx={{ color: "primary.main" }}>Home rehabilitation, measured</Typography>
+            <Typography variant="h2" sx={{ fontSize: { xs: "2.2rem", md: "3rem" }, mt: 1, lineHeight: 1.1 }}>
+              See every repetition, not just the count.
             </Typography>
-          </Box>
+            <Typography sx={{ color: "text.secondary", mt: 2.5, fontSize: 17, maxWidth: 520 }}>
+              PhysioVision is a therapist workspace for exercises patients do at home with a single camera.
+              Each set arrives as a structured session, so you can tell how the movement went and how it is changing.
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 4 }}>
+              <Button component={Link} href="/register" variant="contained" size="large" endIcon={<ArrowForward />}>Create an account</Button>
+              <Button component={Link} href="/login" variant="outlined" size="large">Open the demo</Button>
+            </Stack>
+            <Typography variant="caption" component="p" sx={{ color: "text.secondary", mt: 2 }}>
+              A research and demonstration tool. Not a medical device.
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <SampleSession />
+          </Grid>
+        </Grid>
+      </Container>
 
-          <Box sx={{ flexGrow: 1, display: { xs: "none", md: "flex" }, gap: { md: 3, lg: 4 }, justifyContent: "center" }}>
-            {[
-              ["Platform", "#platform"],
-              ["Features", "#features"],
-              ["Pricing", "#pricing"],
-              ["Docs", "#docs"],
-            ].map(([label, href]) => (
-              <Button key={label} component={Link} href={href} sx={{ color: "text.secondary", textTransform: "none", fontWeight: 600, fontSize: 15 }}>
-                {label}
-              </Button>
+      <Box id="how" sx={{ bgcolor: "background.paper", borderTop: `1px solid ${tokens.line}`, borderBottom: `1px solid ${tokens.line}` }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
+          <Typography variant="h4">How it works</Typography>
+          <Grid container spacing={4} sx={{ mt: 1 }}>
+            {steps.map((s, i) => (
+              <Grid item xs={12} md={4} key={s.title}>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: "rgba(15,118,110,0.08)", color: "primary.main", display: "grid", placeItems: "center" }}>{s.icon}</Box>
+                  <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>Step {i + 1}</Typography>
+                </Stack>
+                <Typography variant="h6" sx={{ mt: 2 }}>{s.title}</Typography>
+                <Typography sx={{ color: "text.secondary", mt: 1 }}>{s.text}</Typography>
+              </Grid>
             ))}
-          </Box>
+          </Grid>
+        </Container>
+      </Box>
 
-          <Stack direction="row" spacing={1.5}>
-            <Button
-              component={Link}
-              href="/login"
-              variant="text"
-              sx={{ color: "text.primary", textTransform: "none", fontWeight: 600, fontSize: 15 }}
-            >
-              Sign In
-            </Button>
-            <Button
-              component={Link}
-              href="/register"
-              variant="contained"
-              sx={{ py: 1, px: 2.5, fontSize: 15 }}
-            >
-              Get Started
-            </Button>
+      <Container id="measures" maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
+        <Grid container spacing={6}>
+          <Grid item xs={12} md={4}>
+            <Typography variant="h4">What it measures</Typography>
+            <Typography sx={{ color: "text.secondary", mt: 1.5 }}>
+              Exercises are defined as specifications in the engine, so a new exercise does not require new code. Currently:
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }} useFlexGap>
+              {exercises.map((e) => <Chip key={e} label={e} variant="outlined" />)}
+            </Stack>
+          </Grid>
+          <Grid item xs={12} md={8}>
+            <Paper>
+              {measures.map(([title, text], i) => (
+                <Box key={title}>
+                  {i > 0 && <Divider />}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.5, sm: 3 }} sx={{ p: 2.5 }}>
+                    <Box sx={{ minWidth: 220, display: "flex", gap: 1, alignItems: "center" }}>
+                      <FactCheckOutlined fontSize="small" sx={{ color: "primary.main" }} />
+                      <Typography sx={{ fontWeight: 600 }}>{title}</Typography>
+                    </Box>
+                    <Typography sx={{ color: "text.secondary" }}>{text}</Typography>
+                  </Stack>
+                </Box>
+              ))}
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+
+      <Box id="limits" sx={{ bgcolor: "background.paper", borderTop: `1px solid ${tokens.line}` }}>
+        <Container maxWidth="md" sx={{ py: { xs: 6, md: 8 } }}>
+          <Typography variant="h4">Limitations</Typography>
+          <Stack component="ul" spacing={1.5} sx={{ mt: 2, pl: 2.5, color: "text.secondary", "& li": { pl: 0.5 } }}>
+            <li>Angles come from a single 2D camera. They are projections that depend on where the camera stands, and are estimates rather than goniometer readings.</li>
+            <li>
+              The analysis has not been validated against a reference system in patients. In a published comparison of a webcam pose model with optical
+              motion capture in healthy adults, agreement was good for some shoulder motions but poor for shoulder and elbow flexion (Wang et al., PLOS ONE, 2023).
+            </li>
+            <li>Thresholds are engineering defaults and should be calibrated for each patient and protocol.</li>
+            <li>PhysioVision supports exercise review and documentation. It does not diagnose and is not a medical device.</li>
           </Stack>
         </Container>
       </Box>
 
-      {/* ===== Hero ===== */}
-      <Container id="platform" maxWidth="xl" sx={{ position: "relative", zIndex: 1, pt: { xs: 6, md: 10 }, pb: { xs: 6, md: 10 }, scrollMarginTop: 80 }}>
-        <Stack spacing={3} alignItems="center" textAlign="center">
-          <Box
-            className="badge badge-info"
-            sx={{ px: 2, py: 0.8, fontSize: 13 }}
-          >
-            <AutoGraph sx={{ fontSize: 16 }} /> AI-Powered Rehabilitation
-          </Box>
-
-          <Typography
-            variant="h1"
-            sx={{ fontSize: { xs: 42, md: 72 }, fontWeight: 800, lineHeight: 1.05, maxWidth: 980 }}
-          >
-            Real-time rehab intelligence for
-            <Box component="span" className="text-gradient">
-              {" "}every patient
-            </Box>
-          </Typography>
-
-          <Typography
-            variant="h6"
-            sx={{ color: "text.secondary", fontWeight: 400, maxWidth: 680, fontSize: { xs: 17, md: 21 } }}
-          >
-            PhysioVision combines edge pose-tracking, 6 coordinating AI agents, and
-            therapist-grade reporting — so clinics deliver personalized care at scale.
-          </Typography>
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mt: 2 }}>
-            <Button
-              component={Link}
-              href="/register"
-              variant="contained"
-              sx={{ py: 1.5, px: 4, fontSize: 16 }}
-            >
-              Start Free Trial <ArrowForward />
-            </Button>
-            <Button
-              component={Link}
-              href="/login?demo=1"
-              className="btn-ghost"
-              sx={{ py: 1.5, px: 4, fontSize: 16 }}
-            >
-              <PlayCircle sx={{ mr: 1 }} /> Watch Demo
-            </Button>
-          </Stack>
-
-          {/* Stats */}
-          <Stack
-            direction="row"
-            flexWrap="wrap"
-            justifyContent="center"
-            spacing={{ xs: 3, md: 6 }}
-            sx={{ mt: 4, gap: 2 }}
-          >
-            {stats.map((s) => (
-              <Box key={s.label} sx={{ textAlign: "center" }}>
-                <Typography
-                  variant="h3"
-                  className="text-gradient"
-                  sx={{ fontWeight: 800, fontSize: { xs: 28, md: 36 } }}
-                >
-                  {s.value}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
-                  {s.label}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        </Stack>
-
-        {/* Hero mockup */}
-        <Box
-          className="glass-card"
-          sx={{
-            mt: { xs: 9, md: 11 },
-            p: { xs: 2, md: 3 },
-            position: "relative",
-            overflow: "hidden",
-            maxWidth: { xs: "100%", md: 980 },
-            mx: "auto",
-          }}
-        >
-          <Box
-            className="bg-grid"
-            sx={{
-              borderRadius: 3,
-              p: 3,
-              background:
-                "radial-gradient(ellipse at 70% 20%, rgba(34,211,238,0.15), transparent 60%), rgba(4,16,31,0.5)",
-              border: "1px solid rgba(34,211,238,0.15)",
-            }}
-          >
-            <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
-              <Box sx={{ flex: 2 }}>
-                <Typography sx={{ fontWeight: 700, mb: 1 }}>Live Session — Knee Rehab</Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
-                  Rep 8 / 12 • Depth 112° • Asymmetry 3%
-                </Typography>
-                <Box
-                  className="glass-card-compact"
-                  sx={{ p: 2, display: "flex", alignItems: "center", gap: 2 }}
-                >
-                  <Box
-                    className="pulse-dot"
-                    sx={{ width: 12, height: 12, borderRadius: "50%", background: "#10d97e" }}
-                  />
-                  <Typography variant="body2">Movement quality: Excellent</Typography>
-                  <Box sx={{ flexGrow: 1 }} />
-                  <Box className="badge badge-success">Score 92</Box>
-                </Box>
-              </Box>
-              <Stack spacing={2} sx={{ flex: 1 }}>
-                {[
-                  { l: "ROM Improvement", v: "+18°", c: "#22d3ee" },
-                  { l: "Pain Index", v: "-42%", c: "#10d97e" },
-                  { l: "Risk Level", v: "Low", c: "#f5b73b" },
-                ].map((m) => (
-                  <Box key={m.l} className="glass-card-compact" sx={{ p: 1.5 }}>
-                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                      {m.l}
-                    </Typography>
-                    <Typography sx={{ fontWeight: 800, fontSize: 22, color: m.c }}>
-                      {m.v}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </Stack>
-          </Box>
-        </Box>
-      </Container>
-
-      {/* ===== Features ===== */}
-      <Container id="features" maxWidth="lg" sx={{ pt: { xs: 3, md: 5 }, pb: { xs: 6, md: 10 }, scrollMarginTop: 80 }}>
-        <Stack spacing={1.5} alignItems="center" textAlign="center" mb={6}>
-          <Typography variant="h2" sx={{ fontWeight: 800, fontSize: { xs: 32, md: 46 } }}>
-            Everything a modern clinic needs
-          </Typography>
-          <Typography sx={{ color: "text.secondary", maxWidth: 620, fontSize: { xs: 15, md: 17 } }}>
-            From the treatment table to the executive summary — PhysioVision unifies
-            movement science, AI, and clinical workflow.
-          </Typography>
-        </Stack>
-
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "1fr 1fr 1fr" },
-            gap: 2.5,
-          }}
-        >
-          {features.map((f, i) => (
-            <Box key={i} className="glass-card" sx={{ p: 3 }}>
-              <Box
-                sx={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 2.5,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "linear-gradient(135deg, rgba(34,211,238,0.2), rgba(59,130,246,0.12))",
-                  border: "1px solid rgba(34,211,238,0.3)",
-                  color: "#22d3ee",
-                  mb: 2,
-                }}
-              >
-                {f.icon}
-              </Box>
-              <Typography sx={{ fontWeight: 700, fontSize: 17, mb: 0.8 }}>{f.title}</Typography>
-              <Typography sx={{ color: "text.secondary", fontSize: 15 }}>
-                {f.desc}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-      </Container>
-
-      {/* ===== Testimonials ===== */}
-      <Container maxWidth="lg" sx={{ pt: { xs: 4, md: 8 }, pb: { xs: 2, md: 3 } }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>
-          {testimonials.map((t, i) => (
-            <Box key={i} className="glass-card" sx={{ p: 4 }}>
-              <Typography sx={{ fontSize: 19, fontWeight: 500, fontStyle: "italic", mb: 3 }}>
-                {"\u201c"}{t.quote}{"\u201d"}
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Box
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg,#0891b2,#22d3ee)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: 800,
-                    color: "#04101f",
-                  }}
-                >
-                  {t.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
-                </Box>
-                <Box>
-                  <Typography sx={{ fontWeight: 700 }}>{t.name}</Typography>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    {t.role}
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      </Container>
-
-      {/* ===== CTA ===== */}
-      <Container id="pricing" maxWidth="md" sx={{ py: { xs: 2, md: 3 }, scrollMarginTop: 80 }}>
-        <Box
-          className="glass-card"
-          sx={{
-            p: { xs: 4, md: 6 },
-            textAlign: "center",
-            background:
-              "radial-gradient(ellipse at 50% 0%, rgba(34,211,238,0.2), transparent 70%), rgba(11,30,51,0.6)",
-          }}
-        >
-          <Typography variant="h3" sx={{ fontWeight: 800, mb: 2, fontSize: { xs: 28, md: 40 } }}>
-            Start monitoring patients in minutes
-          </Typography>
-          <Typography sx={{ color: "text.secondary", mb: 3, fontSize: { xs: 16, md: 18 } }}>
-            No credit card required. Connect your first session in under 5 minutes.
-          </Typography>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={2}
-            justifyContent="center"
-          >
-            <Button
-              component={Link}
-              href="/register"
-              variant="contained"
-              sx={{ py: 1.5, px: 4 }}
-            >
-              Create Free Account <ArrowForward />
-            </Button>
-            <Button
-              component={Link}
-              href="/login"
-              className="btn-ghost"
-              sx={{ py: 1.5, px: 4 }}
-            >
-              I already have an account
-            </Button>
-          </Stack>
-          <Stack direction="row" spacing={1} justifyContent="center" mt={3} flexWrap="wrap">
-            {["HIPAA-aware", "SOC 2 ready", "Open API"].map((b) => (
-              <Box key={b} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <CheckCircle sx={{ fontSize: 16, color: "#10d97e" }} />
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {b}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        </Box>
-      </Container>
-
-      {/* ===== Footer ===== */}
-      <Box
-        id="docs"
-        component="footer"
-        sx={{
-          borderTop: "1px solid rgba(34,211,238,0.15)",
-          py: 4,
-          px: { xs: 2, md: 6 },
-          mt: 4,
-        }}
-      >
-        <Container maxWidth="xl">
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            justifyContent="space-between"
-            alignItems="center"
-            spacing={2}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 2,
-                  background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <MonitorHeart sx={{ color: "#04101f", fontSize: 18 }} />
-              </Box>
-              <Typography sx={{ fontWeight: 800 }}>
-                Physio<span style={{ color: "#22d3ee" }}>Vision</span>
-              </Typography>
-            </Box>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              © {new Date().getFullYear()} PhysioVision. All rights reserved.
-            </Typography>
-            <Stack id="terms" direction="row" spacing={3}>
-              {["Privacy", "Terms", "Contact"].map((t) => (
-                <Typography id={t === "Privacy" ? "privacy" : undefined} key={t} variant="caption" sx={{ color: "text.secondary", cursor: "pointer" }}>
-                  {t}
-                </Typography>
-              ))}
-            </Stack>
+      <Box component="footer" sx={{ borderTop: `1px solid ${tokens.line}` }}>
+        <Container maxWidth="lg" sx={{ py: 3, display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", justifyContent: "space-between" }}>
+          <Brand />
+          <Stack direction="row" spacing={2.5} sx={{ "& a": { color: "text.secondary", fontSize: 14, textDecoration: "none" } }}>
+            <a href="https://github.com/Wang-Tongfei/PhysioSight" target="_blank" rel="noreferrer">PhysioSight engine</a>
+            <a href="https://github.com/Wang-Tongfei/PhysioVision" target="_blank" rel="noreferrer">PhysioVision source</a>
           </Stack>
         </Container>
       </Box>

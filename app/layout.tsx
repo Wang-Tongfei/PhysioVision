@@ -6,9 +6,9 @@ import theme from "./theme";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v14-appRouter";
 
 export const metadata: Metadata = {
-  title: "PhysioVision | AI Rehabilitation Assistant",
+  title: "PhysioVision | Rehabilitation exercise analysis",
   description:
-    "AI-powered rehabilitation platform for physiotherapy clinics. Multi-patient monitoring, movement analysis, and therapist decision support.",
+    "Therapist workspace for single-camera rehabilitation exercise analysis: session uploads, progress trends and SOAP note drafts. A research and demonstration tool, not a medical device.",
 };
 
 export default function RootLayout({
