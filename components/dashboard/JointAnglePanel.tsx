@@ -33,7 +33,7 @@ export default function JointAnglePanel() {
                 thickness={9}
                 label={j.name}
                 caption={`${j.value}° / ${j.target}°`}
-                color={pct >= 85 ? "#22d3ee" : pct >= 60 ? "#f5b73b" : "#ef5b5b"}
+                color={pct >= 85 ? "#0F766E" : pct >= 60 ? "#B45309" : "#B91C1C"}
               />
             </Box>
           );

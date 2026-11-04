@@ -41,7 +41,7 @@ function exerciseFromApi(item: ApiExercise): ExerciseRecord {
     sets: item.default_sets,
     reps: item.default_reps,
     focus: item.category || "General",
-    color: "#22d3ee",
+    color: "#0F766E",
     instructions: item.instructions || "Follow the therapist's prescribed technique.",
   };
 }
@@ -87,7 +87,7 @@ export default function ExercisesPage() {
       reps: Math.max(1, Number(form.reps) || 1),
       focus: form.focus,
       instructions: form.instructions.trim() || "Follow the therapist's prescribed technique.",
-      color: "#22d3ee",
+      color: "#0F766E",
     };
     if (mode === "live") {
       try {
@@ -213,7 +213,7 @@ export default function ExercisesPage() {
                 </Box>
               </Stack>
               <Stack direction="row" spacing={1}>
-                <Button fullWidth variant="outlined" startIcon={<PlayCircle />} onClick={() => setDemo(exercise)} sx={{ borderColor: "rgba(34,211,238,0.35)", color: "#22d3ee" }}>Demo</Button>
+                <Button fullWidth variant="outlined" startIcon={<PlayCircle />} onClick={() => setDemo(exercise)} sx={{ borderColor: "rgba(15,118,110,0.35)", color: "#0F766E" }}>Demo</Button>
                 <Button fullWidth variant="contained" startIcon={<Assignment />} onClick={() => setPrescribe(exercise)}>Prescribe</Button>
               </Stack>
             </SectionCard>
@@ -243,7 +243,7 @@ export default function ExercisesPage() {
       <Dialog open={Boolean(demo)} onClose={() => setDemo(null)} fullWidth maxWidth="sm">
         <DialogTitle>{demo?.name} demo</DialogTitle>
         <DialogContent>
-          <Box sx={{ height: 220, borderRadius: 2, bgcolor: "rgba(34,211,238,.08)", display: "grid", placeItems: "center", mb: 2 }}>
+          <Box sx={{ height: 220, borderRadius: 2, bgcolor: "rgba(15,118,110,.08)", display: "grid", placeItems: "center", mb: 2 }}>
             <FitnessCenter sx={{ fontSize: 82, color: demo?.color }} />
           </Box>
           <Typography>{demo?.instructions}</Typography>

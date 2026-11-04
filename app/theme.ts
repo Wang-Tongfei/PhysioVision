@@ -1,6 +1,30 @@
 "use client";
 
-import { createTheme } from "@mui/material/styles";
+import { createTheme, alpha } from "@mui/material/styles";
+
+/*
+ * PhysioVision design tokens.
+ *
+ * A light, clinical interface: neutral surfaces, one teal accent, thin borders
+ * instead of shadows and glass. Status colours are reserved for meaning
+ * (good / attention / problem), never for decoration.
+ */
+export const tokens = {
+  teal: "#0F766E",
+  tealLight: "#14B8A6",
+  tealDark: "#115E59",
+  indigo: "#4F46E5",
+  amber: "#B45309",
+  red: "#B91C1C",
+  green: "#15803D",
+  ink: "#0F172A",
+  inkSoft: "#475569",
+  muted: "#94A3B8",
+  line: "#E2E8F0",
+  surface: "#FFFFFF",
+  canvas: "#F6F7F9",
+  subtle: "#F1F5F9",
+};
 
 declare module "@mui/material/styles" {
   interface Palette {
@@ -15,131 +39,94 @@ declare module "@mui/material/styles" {
 
 export const theme = createTheme({
   palette: {
-    mode: "dark",
-    primary: {
-      main: "#22d3ee",          // cyan-400  更亮的青色
-      light: "#67e8f9",
-      dark: "#0891b2",
-      contrastText: "#04101f",
-    },
-    secondary: {
-      main: "#3b82f6",          // blue-500
-      light: "#60a5fa",
-      dark: "#1d4ed8",
-    },
-    success: { main: "#10d97e" }, // 鲜艳的绿色
-    warning: { main: "#f5b73b" },
-    error: { main: "#ef5b5b" },
-    info: { main: "#22d3ee" },
-    background: {
-      default: "#04101f",       // 浅一点的深蓝
-      paper: "rgba(11, 30, 51, 0.65)",  // 玻璃拟态
-    },
-    text: {
-      primary: "#e6f4ff",
-      secondary: "#8db5cc",
-    },
-    divider: "rgba(34, 211, 238, 0.15)",
-    glass: {
-      background: "rgba(11, 30, 51, 0.55)",
-      border: "rgba(34, 211, 238, 0.25)",
-    },
-    gradient: {
-      cyan: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
-      blue: "linear-gradient(135deg, #1e40af 0%, #22d3ee 100%)",
-      sun: "linear-gradient(135deg, #f5b73b 0%, #ef5b5b 100%)",
-    },
+    mode: "light",
+    primary: { main: tokens.teal, light: tokens.tealLight, dark: tokens.tealDark, contrastText: "#FFFFFF" },
+    secondary: { main: tokens.indigo },
+    success: { main: tokens.green },
+    warning: { main: tokens.amber },
+    error: { main: tokens.red },
+    info: { main: tokens.indigo },
+    background: { default: tokens.canvas, paper: tokens.surface },
+    text: { primary: tokens.ink, secondary: tokens.inkSoft, disabled: tokens.muted },
+    divider: tokens.line,
+    // kept for components that still read these keys
+    glass: { background: tokens.surface, border: tokens.line },
+    gradient: { cyan: tokens.teal, blue: tokens.teal, sun: tokens.amber },
   },
   typography: {
     fontFamily: '"Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
-    h1: { fontWeight: 700, letterSpacing: "-0.02em" },
+    h1: { fontWeight: 700, letterSpacing: "-0.025em" },
     h2: { fontWeight: 700, letterSpacing: "-0.02em" },
-    h3: { fontWeight: 700, letterSpacing: "-0.01em" },
-    h4: { fontWeight: 700, letterSpacing: "-0.01em" },
-    h5: { fontWeight: 600 },
-    h6: { fontWeight: 600 },
+    h3: { fontWeight: 650, letterSpacing: "-0.02em", fontSize: "2.1rem" },
+    h4: { fontWeight: 650, letterSpacing: "-0.015em", fontSize: "1.65rem" },
+    h5: { fontWeight: 600, fontSize: "1.2rem" },
+    h6: { fontWeight: 600, fontSize: "1rem" },
+    subtitle2: { fontWeight: 600 },
     button: { textTransform: "none", fontWeight: 600 },
     body2: { lineHeight: 1.6 },
+    overline: { fontWeight: 600, letterSpacing: "0.08em" },
   },
-  shape: {
-    borderRadius: 14,
-  },
+  shape: { borderRadius: 10 },
   components: {
     MuiCssBaseline: {
       styleOverrides: {
-        body: {
-          backgroundImage:
-            "radial-gradient(ellipse 60% 50% at 50% -10%, rgba(34,211,238,0.18) 0%, transparent 60%)," +
-            "radial-gradient(ellipse 50% 50% at 90% 50%, rgba(59,130,246,0.12) 0%, transparent 60%)," +
-            "linear-gradient(180deg, #06243e 0%, #04101f 100%)",
-          backgroundAttachment: "fixed",
-          backgroundRepeat: "no-repeat",
-          backgroundSize: "cover",
-        },
+        body: { backgroundColor: tokens.canvas },
         "*::-webkit-scrollbar": { width: 8, height: 8 },
-        "*::-webkit-scrollbar-thumb": {
-          background: "rgba(34, 211, 238, 0.25)",
-          borderRadius: 8,
-        },
+        "*::-webkit-scrollbar-thumb": { background: "#CBD5E1", borderRadius: 8 },
         "*::-webkit-scrollbar-track": { background: "transparent" },
       },
     },
     MuiPaper: {
+      defaultProps: { elevation: 0 },
       styleOverrides: {
-        root: {
-          backgroundImage: "none",
-          background: "rgba(11, 30, 51, 0.55)",
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
-          border: "1px solid rgba(34, 211, 238, 0.2)",
-        },
+        root: { backgroundImage: "none", border: `1px solid ${tokens.line}` },
       },
     },
+    MuiAppBar: { styleOverrides: { root: { border: "none" } } },
+    MuiDrawer: { styleOverrides: { paper: { border: "none" } } },
+    MuiMenu: { styleOverrides: { paper: { boxShadow: "0 8px 24px rgba(15,23,42,0.08)" } } },
+    MuiPopover: { styleOverrides: { paper: { boxShadow: "0 8px 24px rgba(15,23,42,0.08)" } } },
+    MuiDialog: { styleOverrides: { paper: { boxShadow: "0 24px 48px rgba(15,23,42,0.16)" } } },
     MuiButton: {
+      defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: {
-          textTransform: "none",
-          borderRadius: 12,
-          fontWeight: 600,
-        },
-        containedPrimary: {
-          background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
-          boxShadow: "0 2px 10px rgba(34, 211, 238, 0.28)",
-          color: "#04101f",
-          fontWeight: 600,
-          transition: "transform .2s ease, box-shadow .2s ease, background .2s ease",
-          "&:hover": {
-            background: "linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)",
-            boxShadow: "0 3px 12px rgba(34, 211, 238, 0.22)",
-            transform: "translateY(-1px)",
-          },
-        },
+        root: { borderRadius: 8, fontWeight: 600, paddingInline: 14 },
+        outlined: { borderColor: tokens.line, color: tokens.ink, "&:hover": { borderColor: "#CBD5E1", background: tokens.subtle } },
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: { fontWeight: 600, borderRadius: 8 },
+        root: { fontWeight: 600, borderRadius: 6 },
+        sizeSmall: { height: 22, fontSize: 12 },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: { background: tokens.surface, "& fieldset": { borderColor: tokens.line } },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: { borderColor: tokens.line },
+        head: { color: tokens.inkSoft, fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" },
       },
     },
     MuiLinearProgress: {
       styleOverrides: {
-        root: {
-          height: 6,
-          borderRadius: 6,
-          backgroundColor: "rgba(34, 211, 238, 0.08)",
-        },
+        root: { height: 6, borderRadius: 6, backgroundColor: tokens.subtle },
         bar: { borderRadius: 6 },
       },
     },
-    MuiDivider: {
-      styleOverrides: { root: { borderColor: "rgba(34, 211, 238, 0.12)" } },
-    },
+    MuiDivider: { styleOverrides: { root: { borderColor: tokens.line } } },
     MuiTooltip: {
+      styleOverrides: { tooltip: { background: tokens.ink, fontSize: 12, fontWeight: 500 } },
+    },
+    MuiListItemButton: {
       styleOverrides: {
-        tooltip: {
-          background: "rgba(4, 16, 31, 0.92)",
-          border: "1px solid rgba(34, 211, 238, 0.3)",
-          fontSize: 12,
+        root: {
+          borderRadius: 8,
+          "&.Mui-selected": { background: alpha(tokens.teal, 0.08), color: tokens.tealDark },
+          "&.Mui-selected:hover": { background: alpha(tokens.teal, 0.12) },
         },
       },
     },

@@ -37,11 +37,11 @@ export default function HistoricalTrends() {
             option={lineOption(
               liveTrend.dates,
               [
-                { name: "ROM (°)", data: liveTrend.rom, color: "#22d3ee" },
-                { name: "Quality", data: liveTrend.quality, color: "#f5b73b" },
-                { name: "Risk", data: liveTrend.risk, color: "#ef5b5b" },
+                { name: "ROM (°)", data: liveTrend.rom, color: "#0F766E" },
+                { name: "Quality", data: liveTrend.quality, color: "#B45309" },
+                { name: "Risk", data: liveTrend.risk, color: "#B91C1C" },
               ],
-              { area: true }
+              {}
             )}
           />
         ) : (
@@ -60,17 +60,17 @@ export default function HistoricalTrends() {
             option={lineOption(
               recoveryTrend.dates,
               [
-                { name: "ROM (°)", data: recoveryTrend.rom, color: "#22d3ee" },
-                { name: "Quality", data: recoveryTrend.quality, color: "#f5b73b" },
+                { name: "ROM (°)", data: recoveryTrend.rom, color: "#0F766E" },
+                { name: "Quality", data: recoveryTrend.quality, color: "#B45309" },
                 { name: "Adherence %", data: recoveryTrend.adherence, color: "#a78bfa" },
               ],
-              { area: true }
+              {}
             )}
           />
         </Box>
         <Box>
           <Stack direction="row" spacing={1.25} alignItems="center" mb={1}>
-            <BarChart sx={{ fontSize: 18, color: "#22d3ee" }} />
+            <BarChart sx={{ fontSize: 18, color: "#0F766E" }} />
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
               Clinic Analytics — Sessions by Category
             </Typography>
