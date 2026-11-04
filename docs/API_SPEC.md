@@ -17,13 +17,29 @@ current prototype.
 | POST | `/patients` | Register a patient (FHIR MRN) |
 | GET | `/patients/{id}` | Patient profile |
 | GET | `/patients/{id}/history` | SOAP reports history |
-| GET | `/patients/{id}/sessions` | Session metrics (last 20) |
+| POST | `/patients/{id}/sessions` | Upload a physiosight Session JSON from the patient's device (201; 409 if already uploaded; 422 if it fails the engine's validation) |
+| GET | `/patients/{id}/sessions` | Stored sessions, newest first (`?limit=`, default 50) |
+| GET | `/patients/{id}/progress` | Per-exercise time series (reps, ROM, quality, fatigue, fault counts) over stored Sessions |
+| GET | `/sessions/{id}/analysis` | Full Session document of one stored session |
 
 **PatientCreate**
 ```json
 { "mrn": "MRN-10042", "full_name": "Lim Wei Jie", "date_of_birth": "1985-04-12",
   "gender": "M", "diagnosis": "Post-ACL reconstruction", "risk_tier": "moderate" }
 ```
+
+**Uploading a Session.** The body is the file written by the engine, unchanged:
+
+```bash
+physiosight analyze squat.npz -e squat -o session.json      # or: physiosight run --sessions-dir sessions/
+curl -X POST "$API/patients/12/sessions" -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" --data @session.json
+```
+
+Stored metrics come from the Session (`app/services/session_records.py`): `rom_achieved_deg`
+is the median peak flexion of valid repetitions, `fatigue_index` the within-set velocity loss
+(empty when not estimable), `movement_quality_score` 70% valid share + 30% completion. A SOAP
+draft can then be generated with `POST /reports/{session_id}/generate`.
 
 ---
 
