@@ -132,18 +132,10 @@ Severity: `info` · `warning` · `critical`. Delivered to Telegram + dashboard.
 
 ---
 
-## Future AI Agent Integration
+## Rules and language models
 
-The following pipeline is a design option and is not part of the current core
-runtime. Live monitoring uses the deterministic `physiosight` engine rules without
-Redis, an external LLM, FHIR, or MinIO.
-
-```
-frame → movement_analysis → risk_assessment → rehab_coach
-                                  │
-                                  ├─→ therapist_assistant → soap_report (FHIR)
-                                  └─→ analytics (trends/KPIs)
-```
-
-Agents: **Movement Analysis**, **Risk Assessment**, **Rehab Coach**,
-**Therapist Assistant**, **SOAP Report**, **Analytics**.
+All movement analysis, scoring, risk tiers and coaching cues are deterministic
+rules (the `physiosight` engine and `backend/app/agents/*`). The only optional
+language-model call is the SOAP draft (`soap_agent` via `foundry_service`), used
+when Azure AI Foundry credentials are configured; without them a fixed template
+is used and the response says `"generation_mode": "template"`.
