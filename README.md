@@ -54,8 +54,8 @@ PhysioVision/
 
 动作分析引擎是独立的 Python 包
 [`physiosight`](https://github.com/Wang-Tongfei/PhysioSight)，由
-`backend/requirements.txt` 按固定提交安装（`physiosight[mediapipe,notify] @ git+...`），
-不再使用 Git 子模块。升级引擎时修改该提交号，并对照引擎仓库的
+`backend/requirements.txt` 按发布标签安装（`physiosight[mediapipe,notify] @ git+...@v0.1.0`），
+不再使用 Git 子模块。升级引擎时修改该标签，并对照引擎仓库的
 `docs/BEHAVIOR_CHANGES.md`。安装需要本机有 `git`。
 
 ## 页面
@@ -160,7 +160,7 @@ PHYSIO_TG_CHAT=your-chat-id
 [PhysioSight README](https://github.com/Wang-Tongfei/PhysioSight)。
 
 ```powershell
-pip install "physiosight[mediapipe,notify] @ git+https://github.com/Wang-Tongfei/PhysioSight@b8d2930fd2510b60a7448f407051947e0f9eeb78"
+pip install "physiosight[mediapipe,notify] @ git+https://github.com/Wang-Tongfei/PhysioSight@v0.1.0"
 physiosight run            # 摄像头
 physiosight run video.mp4 -e squat
 ```
