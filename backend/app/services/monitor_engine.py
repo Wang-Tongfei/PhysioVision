@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import queue
 import secrets
-import statistics
 import threading
 import time
 import uuid
@@ -21,8 +20,15 @@ from typing import Iterator
 
 from app.core.config import settings
 from app.agents.coach_agent import coach
-from app.agents.risk_agent import assess
-from app.agents.therapist_agent import summarize
+from app.services.session_records import (  # noqa: F401  (re-exported for callers/tests)
+    ROM_TARGETS,
+    assess_session,
+    fatigue_from_session,
+    has_valid_data,
+    persist_session,
+    rom_from_session,
+    telemetry_from_session,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -34,12 +40,6 @@ CLIPS_ROOT = DATA_ROOT / "clips"
 CLIP_COOLDOWN_S = 15.0
 
 SUPPORTED_EXERCISES = {"bicep_curl", "squat", "plank", "pushup"}
-ROM_TARGETS = {
-    "bicep_curl": 70.0,
-    "squat": 80.0,
-    "pushup": 70.0,
-    "plank": 160.0,
-}
 
 
 class BrowserFrameSource:
@@ -132,74 +132,6 @@ def _load_vision() -> SimpleNamespace:
         ClipRecorder=ClipRecorder, TelegramNotifier=TelegramNotifier, draw_hud=draw_hud,
         draw_pose=draw_pose, SourceInfo=SourceInfo,
     )
-
-
-def rom_from_session(session, fallback_values: list[float]) -> float:
-    """Range of motion for the dashboard, from per-repetition angle extrema.
-
-    Median over valid repetitions (else all attempts) of the peak flexion
-    (``max_deg`` of the recorded ``*_flexion_*`` angles, 0 deg = full extension),
-    averaged over sides. Falls back to the spread of the live metric when no
-    repetition was attempted, and to its mean for holds (plank body line).
-    """
-    if session.exercise_kind == "hold":
-        return round(statistics.fmean(fallback_values), 1) if fallback_values else 0.0
-    reps = [r for r in session.reps if r.outcome == "valid"] or list(session.reps)
-    per_rep = []
-    for rep in reps:
-        peaks = [a.max_deg for name, a in rep.angles.items() if "flexion" in name]
-        if peaks:
-            per_rep.append(statistics.fmean(peaks))
-    if per_rep:
-        return round(statistics.median(per_rep), 1)
-    if len(fallback_values) > 1:
-        return round(max(fallback_values) - min(fallback_values), 1)
-    return round(fallback_values[0], 1) if fallback_values else 0.0
-
-
-FATIGUE_MIN_REPS = 4
-
-
-def rep_angular_velocity(rep) -> float | None:
-    """Mean joint angular velocity of one repetition, in deg/s.
-
-    Excursion of the recorded flexion angles (max - min, averaged over sides)
-    divided by the repetition's duration. A camera-only stand-in for the bar
-    velocity used in velocity-based training.
-    """
-    ranges = [a.max_deg - a.min_deg for name, a in rep.angles.items() if "flexion" in name]
-    duration = rep.ended_at_s - rep.started_at_s
-    if not ranges or duration <= 0:
-        return None
-    return statistics.fmean(ranges) / duration
-
-
-def fatigue_from_session(session) -> float | None:
-    """Within-set velocity loss (%), used as the dashboard's fatigue index.
-
-    Velocity loss over a set is an established indicator of neuromuscular
-    fatigue in resistance training (Sanchez-Medina & Gonzalez-Badillo, Med Sci
-    Sports Exerc 2011; 43(9):1725-1734): the fastest of the first two valid
-    repetitions is the reference, the mean of the last two is compared with it.
-    Here velocity is joint angular velocity from a single camera, so this is a
-    proxy that has not been validated for rehabilitation exercises.
-
-    Returns None when it cannot be estimated: holds, or fewer than
-    FATIGUE_MIN_REPS valid repetitions.
-    """
-    if session.exercise_kind == "hold":
-        return None
-    velocities = [
-        v for v in (rep_angular_velocity(r) for r in session.reps if r.outcome == "valid")
-        if v is not None
-    ]
-    if len(velocities) < FATIGUE_MIN_REPS:
-        return None
-    reference = max(velocities[:2])
-    final = statistics.fmean(velocities[-2:])
-    if reference <= 0:
-        return None
-    return round(min(100.0, max(0.0, 100.0 * (reference - final) / reference)), 1)
 
 
 class MonitorEngine:
@@ -514,7 +446,7 @@ class MonitorEngine:
             notified_complete = False
             frame_interval = 1.0 / max(1.0, fps)
             started_at = datetime.now(timezone.utc)
-            analyzed_frames = good_frames = 0
+            analyzed_frames = 0
             metric_values: list[float] = []
 
             for t, frame in source.frames():
@@ -528,7 +460,6 @@ class MonitorEngine:
                     break
                 if landmarks is not None:
                     analyzed_frames += 1
-                    good_frames += int(result.form_ok)
                     if result.metric_value is not None:
                         metric_values.append(float(result.metric_value))
                     form_status = v.i18n.text(
@@ -610,48 +541,37 @@ class MonitorEngine:
             session_completed = workout_completed or (
                 source_kind == "upload" and not self._stop_event.is_set()
             )
-            completion = min(1.0, float(analyzer.progress) / max(1.0, float(analyzer.target)))
-            form_ratio = good_frames / max(1, analyzed_frames)
-            quality = round(100 * (0.7 * form_ratio + 0.3 * completion), 1)
-            compensation = bool(faults)
-            # within-set velocity loss (%); None when it cannot be estimated
-            fatigue = fatigue_from_session(session)
-            telemetry = {
-                "movement_quality_score": quality,
-                "rom_achieved_deg": rom_from_session(session, metric_values),
-                "rom_target_deg": ROM_TARGETS[exercise],
-                "total_reps": int(analyzer.progress),
-                "fatigue_index": fatigue,
-                "compensation_detected": compensation,
-            }
-            risk = None
-            therapist = None
-            if valid_data:
-                risk = assess(telemetry, base_risk=self._patient_base_risk(patient_id))
-                coaching = coach(telemetry, risk_tier=risk["tier"])
-                therapist = summarize(
-                    telemetry,
-                    baseline_quality=self._patient_baseline(patient_id),
-                    risk=risk,
+            telemetry = telemetry_from_session(session, metric_values)
+            quality = telemetry["movement_quality_score"]
+            fatigue = telemetry["fatigue_index"]
+            compensation = telemetry["compensation_detected"]
+            session_id = None
+            from app.core.database import SessionLocal
+            from app.models.patient import Patient
+
+            with SessionLocal() as db:
+                patient = db.get(Patient, patient_id) if patient_id is not None else None
+                owner_clinic = self._status.get("_owner_clinic_id")
+                if patient is not None and owner_clinic is not None and patient.clinic_id != owner_clinic:
+                    patient = None
+                risk, therapist = assess_session(
+                    db, patient.id if patient else None, telemetry, valid_data
                 )
+                if patient is not None:
+                    row = persist_session(
+                        db, patient_id=patient.id, session=session, telemetry=telemetry,
+                        risk=risk, therapist=therapist, valid_data=valid_data,
+                        completed=session_completed, source="local-monitor", started_at=started_at,
+                    )
+                    db.commit()
+                    session_id = row.id
+            if valid_data and risk:
+                coaching = coach(telemetry, risk_tier=risk["tier"])
             else:
                 coaching = {
                     "message": "Insufficient movement data. Complete at least one valid repetition and try again.",
                     "severity": "warning",
                 }
-            session_id = self._persist_summary(
-                patient_id=patient_id,
-                exercise=exercise,
-                source_kind=source_kind,
-                completed=session_completed,
-                started_at=started_at,
-                telemetry=telemetry,
-                risk=risk,
-                therapist=therapist,
-                valid_data=valid_data,
-                clinic_id=self._status.get("_owner_clinic_id"),
-                analysis=session.model_dump(mode="json"),
-            )
             with self._frame_ready:
                 self._status["phase"] = (
                     "completed" if valid_data and session_completed else "stopped"
@@ -693,103 +613,6 @@ class MonitorEngine:
                 Path(str(source_value)).unlink(missing_ok=True)
             with self._lock:
                 self._browser_source = None
-
-    @staticmethod
-    def _patient_base_risk(patient_id: int | None) -> float:
-        if patient_id is None:
-            return 20.0
-        from app.core.database import SessionLocal
-        from app.models.patient import Patient
-
-        with SessionLocal() as db:
-            patient = db.get(Patient, patient_id)
-            tier = getattr(patient.risk_tier, "value", patient.risk_tier) if patient else "moderate"
-        return {"low": 10.0, "moderate": 35.0, "high": 65.0, "critical": 90.0}.get(
-            str(tier), 35.0
-        )
-
-    @staticmethod
-    def _patient_baseline(patient_id: int | None) -> float:
-        if patient_id is None:
-            return 80.0
-        from sqlalchemy import func
-        from app.core.database import SessionLocal
-        from app.models.session import RehabSession
-
-        with SessionLocal() as db:
-            value = (
-                db.query(func.avg(RehabSession.movement_quality_score))
-                .filter(RehabSession.patient_id == patient_id)
-                .scalar()
-            )
-        return round(float(value or 80.0), 1)
-
-    @staticmethod
-    def _persist_summary(
-        *,
-        patient_id: int | None,
-        exercise: str,
-        source_kind: str,
-        completed: bool,
-        started_at: datetime,
-        telemetry: dict,
-        risk: dict | None,
-        therapist: dict | None,
-        valid_data: bool,
-        clinic_id: int | None,
-        analysis: dict | None = None,
-    ) -> int | None:
-        if patient_id is None:
-            return None
-        from app.core.database import SessionLocal
-        from app.models.alert import Alert
-        from app.models.patient import Patient
-        from app.models.session import RehabSession, SessionStatus
-
-        with SessionLocal() as db:
-            patient = db.get(Patient, patient_id)
-            if patient is None or (
-                clinic_id is not None and patient.clinic_id != clinic_id
-            ):
-                return None
-            row = RehabSession(
-                patient_id=patient_id,
-                edge_node_id="local-monitor",
-                camera_id=source_kind,
-                status=(
-                    SessionStatus.INSUFFICIENT_DATA
-                    if not valid_data
-                    else SessionStatus.COMPLETED if completed else SessionStatus.ABORTED
-                ),
-                started_at=started_at,
-                ended_at=datetime.now(timezone.utc),
-                movement_quality_score=telemetry["movement_quality_score"] if valid_data else None,
-                risk_score=risk["risk_score"] if risk else None,
-                fatigue_index=telemetry["fatigue_index"] if valid_data else None,
-                compensation_detected=telemetry["compensation_detected"] if valid_data else False,
-                total_reps=telemetry["total_reps"],
-                rom_achieved_deg=telemetry["rom_achieved_deg"],
-                rom_target_deg=telemetry["rom_target_deg"],
-                evidence_clip_url=f"exercise:{exercise}",
-                analysis=analysis,
-            )
-            db.add(row)
-            db.flush()
-            if risk and therapist and (
-                risk["tier"] != "low" or telemetry["compensation_detected"]
-            ):
-                db.add(
-                    Alert(
-                        session_id=row.id,
-                        patient_id=patient_id,
-                        severity="critical" if risk["tier"] == "high" else "warning",
-                        type="compensation" if telemetry["compensation_detected"] else "risk",
-                        message=therapist["summary"],
-                        score=risk["risk_score"],
-                    )
-                )
-            db.commit()
-            return row.id
 
 
 def _mirror_points(points, width: int):

@@ -39,6 +39,8 @@ class RehabSession(Base):
     evidence_clip_url = Column(String(256))       # MinIO object key
     # Full physiosight Session document (schema: physiosight.session.models.Session)
     analysis = Column(JSON)
+    # physiosight Session.session_id (UUID); unique so a Session is stored once
+    engine_session_id = Column(String(36), unique=True, index=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
