@@ -8,7 +8,7 @@
 
 ```mermaid
 flowchart LR
-    Camera["摄像头或视频"] --> Bot["Physio_AI_Bot<br/>MediaPipe + OpenCV"]
+    Camera["摄像头或视频"] --> Bot["physiosight 引擎包<br/>MediaPipe + OpenCV"]
     Bot --> API["FastAPI<br/>监测引擎与 MJPEG"]
     API --> UI["Next.js 治疗师前端"]
     UI --> Mock["lib/mockData.ts"]
@@ -64,25 +64,29 @@ backend/app/
 
 ## 4. 动作监测程序
 
-`Physio_AI_Bot` 是本地 Python 程序：
+动作分析由独立的 [`physiosight`](https://github.com/Wang-Tongfei/PhysioSight) 包完成，
+后端以普通依赖安装，`backend/app/services/monitor_engine.py` 只负责任务管理、
+浏览器帧源、MJPEG 推流、权限校验和持久化：
 
 ```mermaid
 flowchart LR
-    Source["VideoSource"] --> Pose["PoseEstimator"]
-    Source --> Hand["HandEstimator（可选）"]
-    Pose --> Analyzer["ExerciseAnalyzer"]
-    Analyzer --> HUD["HUD / OpenCV"]
-    Analyzer --> Clip["错误片段录像"]
-    Analyzer --> Telegram["Telegram（可选）"]
+    Source["FrameSource（摄像头 / 上传视频 / 浏览器帧）"] --> Pose["MediaPipePoseBackend"]
+    Source --> Hand["MediaPipeHandBackend（显示用）"]
+    Pose --> Analysis["Analysis（YAML 动作规格 + 通用状态机）"]
+    Analysis --> Render["render.overlay"]
+    Analysis --> Events["事件：错误片段 / Telegram"]
+    Analysis --> Session["Session 文档 → rehab_sessions.analysis"]
 ```
 
-目前支持弯举、深蹲、平板支撑和俯卧撑。它不依赖后端即可运行。
+目前支持弯举、深蹲、平板支撑和俯卧撑（引擎另有肩前屈，平台尚未开放）。
+分析按帧时间戳计时，浏览器约 10fps 的帧流与本地 30fps 的判定一致。
+引擎也能脱离后端独立运行（`physiosight run`）。
 
 ## 5. 最小集成数据流
 
 ```mermaid
 sequenceDiagram
-    participant B as Physio_AI_Bot
+    participant B as physiosight
     participant A as FastAPI
     participant D as SQLite
     participant U as Next.js
@@ -122,3 +126,23 @@ OpenCV 帧，适合单机或局域网原型。状态通过低频 REST 轮询获�
 3. FastAPI 能持久化并查询会话结果。
 4. 现有前端页面能够显示真实患者、会话和告警数据。
 5. 断开 Telegram 或外部 AI 服务时，核心训练流程仍可运行。
+
+## 6. 改用 physiosight 包后的行为变化
+
+迁移遵循引擎仓库的 `docs/PLATFORM_MIGRATION.md`；引擎自身的全部行为差异见其
+`docs/BEHAVIOR_CHANGES.md`。对平台可见的变化：
+
+| 变化 | 原因 / 影响 |
+| --- | --- |
+| 摄像头画面只在**显示**时镜像，分析使用原始帧 | 原来先镜像再估计姿态，弯举的左右手会颠倒（引擎 BC-4） |
+| 判定按帧时间戳计时（浏览器帧用服务器接收时间） | 浏览器约 10fps 与本地 30fps 判定一致（引擎 BC-2）；上传视频用视频自身时间戳，不再受处理速度影响（BC-5） |
+| 角度在像素坐标下计算 | 非正方形画面下角度不再失真（引擎 BC-1） |
+| `rom_achieved_deg` 改为每次重复的屈曲峰值（取有效重复的中位数） | 原值是整段会话里实时角度的最大值减最小值，会混入准备阶段的数据；平板支撑仍取躯干线角度的平均值 |
+| 新增 `rehab_sessions.analysis`（JSON）和 `GET /api/v1/sessions/{id}/analysis` | 保存引擎输出的完整 Session 文档（每次重复的结果、错误码、角度极值、视角是否合适），只对同一诊所可见 |
+| 错误片段保存在 `backend/data/clips/`，录制的是遮住头部的渲染画面 | 原来保存在子模块目录，录的是原始画面 |
+| 提示文字来自引擎的语言文件（英文），例如 `"Reps: 3/10"` | 原来是 `"Squat reps: 3/10"` 这类硬编码字符串 |
+
+| `fatigue_index` 改为**组内速度损失**（%）：前两次有效重复中较快的一次为参照，与最后两次的平均角速度比较；角速度 = 屈曲幅度 ÷ 重复用时。有效重复少于 4 次或保持型动作（平板支撑）时为空，仪表盘显示 “—” | 原值是“有动作问题的帧占比”，并不衡量疲劳。速度损失是抗阻训练中公认的神经肌肉疲劳指标（Sánchez-Medina & González-Badillo, *Med Sci Sports Exerc* 2011;43(9):1725–1734）；单摄像头只能用关节角速度近似，**尚未在康复动作上验证** |
+
+`coach_agent` / `risk_agent` 把空值的 `fatigue_index` 当作 0 处理。教练提示“建议休息”的阈值仍是
+70%，对速度损失而言偏高（抗阻训练文献常用 20–40% 作为停止一组的阈值），需要结合真实数据重新设定。

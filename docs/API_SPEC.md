@@ -119,7 +119,7 @@ Severity: `info` · `warning` · `critical`. Delivered to Telegram + dashboard.
 ## Future AI Agent Integration
 
 The following pipeline is a design option and is not part of the current core
-runtime. Live monitoring uses the deterministic `Physio_AI_Bot` rules without
+runtime. Live monitoring uses the deterministic `physiosight` engine rules without
 Redis, an external LLM, FHIR, or MinIO.
 
 ```

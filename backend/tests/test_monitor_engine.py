@@ -55,6 +55,10 @@ class MonitorUploadTest(unittest.TestCase):
                     break
                 time.sleep(0.2)
 
+            # let the worker finish its cleanup (closing the source, deleting the upload)
+            # so no daemon thread is still running when the interpreter exits
+            if monitor_engine._thread is not None:
+                monitor_engine._thread.join(timeout=10)
             status = monitor_engine.status()
             self.assertEqual(status["phase"], "stopped", status)
             self.assertEqual(status["data_status"], "insufficient_data")

@@ -83,7 +83,7 @@ export default function RightPanel() {
             </Box>
             <MetricRow icon={<Speed />} label="Movement Score" value={`${live.movement_quality_score ?? 0}%`} color="#22d3ee" />
             <Box sx={{ height: 12 }} />
-            <MetricRow icon={<BatteryAlert />} label="Fatigue" value={`${live.fatigue_index ?? 0}%`} color="#f5b73b" />
+            <MetricRow icon={<BatteryAlert />} label="Fatigue" value={live.fatigue_index == null ? "—" : `${live.fatigue_index}%`} color="#f5b73b" />
           </SectionCard>
           {live.therapist_summary && (
             <SectionCard title="Therapist Assistant" subtitle="Rule-based decision support" icon={<AutoAwesome />}>

@@ -6,13 +6,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# OpenCV's Linux wheels require these shared libraries at runtime. Git is used
-# to fetch the public vision submodule because Render builds this service from
-# the backend directory only.
+# OpenCV/MediaPipe need these shared libraries at runtime (libegl1/libgles2 for
+# MediaPipe's GPU-less GL context). Git is needed by pip to install the
+# physiosight engine from its pinned commit (see requirements.txt).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
+        libegl1 \
         libgl1 \
+        libgles2 \
         libglib2.0-0 \
         libgomp1 \
         libsm6 \
@@ -22,12 +24,6 @@ RUN apt-get update \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-ARG PHYSIO_AI_BOT_COMMIT=dff7bccec75eb9fd066cbca6a551f3cad64f97b5
-RUN git clone --filter=blob:none --no-checkout \
-        https://github.com/Wang-Tongfei/Physio_AI_Bot.git Physio_AI_Bot \
-    && git -C Physio_AI_Bot checkout "${PHYSIO_AI_BOT_COMMIT}" \
-    && rm -rf Physio_AI_Bot/.git
 
 COPY . .
 
