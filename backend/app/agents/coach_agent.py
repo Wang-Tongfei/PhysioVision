@@ -11,7 +11,7 @@ OUTPUTS
 
 DECISION LOGIC
   Rule-based cues prioritised by safety, then quality, then engagement.
-  Fatigue > 70 -> suggest rest. Compensation -> form cue. Low ROM -> reach cue.
+  Fatigue (within-set velocity loss) > 70 -> suggest rest. Compensation -> form cue. Low ROM -> reach cue.
 
 INTERACTION
   Publishes lightweight text/audio cues to the patient display (Raspberry Pi
@@ -21,7 +21,7 @@ from typing import Dict, Any, List
 
 
 def coach(telemetry: Dict[str, Any], risk_tier: str = "low") -> Dict[str, Any]:
-    fatigue = telemetry.get("fatigue_index", 0)
+    fatigue = telemetry.get("fatigue_index") or 0  # None = not estimable (too few reps, holds)
     comp = telemetry.get("compensation_detected", False)
     rom_a = telemetry.get("rom_achieved_deg", 0)
     rom_t = telemetry.get("rom_target_deg", 1)

@@ -157,6 +157,51 @@ def rom_from_session(session, fallback_values: list[float]) -> float:
     return round(fallback_values[0], 1) if fallback_values else 0.0
 
 
+FATIGUE_MIN_REPS = 4
+
+
+def rep_angular_velocity(rep) -> float | None:
+    """Mean joint angular velocity of one repetition, in deg/s.
+
+    Excursion of the recorded flexion angles (max - min, averaged over sides)
+    divided by the repetition's duration. A camera-only stand-in for the bar
+    velocity used in velocity-based training.
+    """
+    ranges = [a.max_deg - a.min_deg for name, a in rep.angles.items() if "flexion" in name]
+    duration = rep.ended_at_s - rep.started_at_s
+    if not ranges or duration <= 0:
+        return None
+    return statistics.fmean(ranges) / duration
+
+
+def fatigue_from_session(session) -> float | None:
+    """Within-set velocity loss (%), used as the dashboard's fatigue index.
+
+    Velocity loss over a set is an established indicator of neuromuscular
+    fatigue in resistance training (Sanchez-Medina & Gonzalez-Badillo, Med Sci
+    Sports Exerc 2011; 43(9):1725-1734): the fastest of the first two valid
+    repetitions is the reference, the mean of the last two is compared with it.
+    Here velocity is joint angular velocity from a single camera, so this is a
+    proxy that has not been validated for rehabilitation exercises.
+
+    Returns None when it cannot be estimated: holds, or fewer than
+    FATIGUE_MIN_REPS valid repetitions.
+    """
+    if session.exercise_kind == "hold":
+        return None
+    velocities = [
+        v for v in (rep_angular_velocity(r) for r in session.reps if r.outcome == "valid")
+        if v is not None
+    ]
+    if len(velocities) < FATIGUE_MIN_REPS:
+        return None
+    reference = max(velocities[:2])
+    final = statistics.fmean(velocities[-2:])
+    if reference <= 0:
+        return None
+    return round(min(100.0, max(0.0, 100.0 * (reference - final) / reference)), 1)
+
+
 class MonitorEngine:
     """Own one camera or uploaded-video analysis job at a time."""
 
@@ -469,7 +514,7 @@ class MonitorEngine:
             notified_complete = False
             frame_interval = 1.0 / max(1.0, fps)
             started_at = datetime.now(timezone.utc)
-            analyzed_frames = good_frames = fault_frames = 0
+            analyzed_frames = good_frames = 0
             metric_values: list[float] = []
 
             for t, frame in source.frames():
@@ -484,7 +529,6 @@ class MonitorEngine:
                 if landmarks is not None:
                     analyzed_frames += 1
                     good_frames += int(result.form_ok)
-                    fault_frames += int(not result.form_ok)
                     if result.metric_value is not None:
                         metric_values.append(float(result.metric_value))
                     form_status = v.i18n.text(
@@ -570,9 +614,8 @@ class MonitorEngine:
             form_ratio = good_frames / max(1, analyzed_frames)
             quality = round(100 * (0.7 * form_ratio + 0.3 * completion), 1)
             compensation = bool(faults)
-            # NOTE: historically named "fatigue"; it is the share of analysed frames
-            # with a form problem, not a fatigue measure.
-            fatigue = round(min(100.0, 100.0 * fault_frames / max(1, analyzed_frames)), 1)
+            # within-set velocity loss (%); None when it cannot be estimated
+            fatigue = fatigue_from_session(session)
             telemetry = {
                 "movement_quality_score": quality,
                 "rom_achieved_deg": rom_from_session(session, metric_values),

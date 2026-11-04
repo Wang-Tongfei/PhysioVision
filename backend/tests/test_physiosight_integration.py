@@ -23,6 +23,7 @@ from app.services.monitor_engine import (  # noqa: E402
     BrowserFrameSource,
     MonitorEngine,
     _load_vision,
+    fatigue_from_session,
     rom_from_session,
 )
 from main import app  # noqa: E402
@@ -41,6 +42,39 @@ class EnginePackageTest(unittest.TestCase):
         self.assertEqual(session.summary.achieved, 3)
         # peak knee flexion = 180 - 90
         self.assertAlmostEqual(rom_from_session(session, [1.0, 2.0]), 90.0, delta=1.0)
+
+    @staticmethod
+    def _squats(paces: list[float]):
+        """Squats whose descent and ascent each take ``pace`` seconds, one per entry."""
+        stand = {"knee_l": 176.0, "knee_r": 176.0}
+        moves = [(1.0, stand)]
+        for pace in paces:
+            moves += [(pace, {"knee_l": 85.0, "knee_r": 85.0}), (0.3, {}), (pace, stand), (0.6, {})]
+        script = synth.Script("squat", stand, moves)
+        return analyze_sequence(synth.render(script), "squat", 50, stop_at_target=False).session
+
+    def test_fatigue_is_within_set_velocity_loss(self):
+        slowing = self._squats([0.8, 0.8, 1.0, 1.2, 1.4, 1.6])
+        self.assertEqual(slowing.summary.achieved, 6)
+        # angular velocity ~ range / (2*pace + 0.3): last reps ~45% slower than the first
+        self.assertGreater(fatigue_from_session(slowing), 35.0)
+        steady = self._squats([1.0] * 6)
+        self.assertLess(fatigue_from_session(steady), 3.0)
+
+    def test_fatigue_is_none_when_not_estimable(self):
+        self.assertIsNone(fatigue_from_session(self._squats([1.0] * 3)))  # fewer than 4 valid reps
+        plank = analyze_sequence(synth.render(synth.plank_script(2)), "plank", 30).session
+        self.assertIsNone(fatigue_from_session(plank))
+
+    def test_agents_accept_an_unknown_fatigue_index(self):
+        from app.agents.coach_agent import coach
+        from app.agents.risk_agent import assess
+
+        telemetry = {"movement_quality_score": 90, "fatigue_index": None, "compensation_detected": False,
+                     "rom_achieved_deg": 80, "rom_target_deg": 80}
+        risk = assess(telemetry, base_risk=10)
+        self.assertEqual(risk["tier"], "low")
+        self.assertEqual(coach(telemetry, risk_tier=risk["tier"])["severity"], "info")
 
     def test_rom_falls_back_to_the_live_metric_without_reps(self):
         session = analyze_sequence(synth.render(synth.squat_script(0)), "squat", 10).session

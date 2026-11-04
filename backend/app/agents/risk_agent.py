@@ -23,7 +23,7 @@ from typing import Dict, Any
 
 def assess(telemetry: Dict[str, Any], base_risk: float = 20.0) -> Dict[str, Any]:
     quality = telemetry.get("movement_quality_score", 100)
-    fatigue = telemetry.get("fatigue_index", 0)
+    fatigue = telemetry.get("fatigue_index") or 0  # None = not estimable (too few reps, holds)
     compensation = 30 if telemetry.get("compensation_detected") else 0
     risk_score = round(
         0.4 * (100 - quality) + 0.3 * fatigue + 0.2 * compensation + 0.1 * base_risk, 1
