@@ -5,24 +5,12 @@ import {
   Box,
   Grid,
   Typography,
-  Stack,
-  Chip,
-  Avatar,
-  LinearProgress,
-  useTheme,
 } from "@mui/material";
 import {
-  TrendingUp,
-  TrendingDown,
   People,
   MonitorHeart,
   Warning,
   HealthAndSafety,
-  FiberManualRecord,
-  ArrowUpward,
-  ArrowDownward,
-  Speed,
-  AccessTime,
 } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import MetricCard from "@/components/common/MetricCard";
@@ -35,7 +23,6 @@ import { api, getSession } from "@/lib/api";
 import { useDataMode } from "@/lib/dataMode";
 
 export default function DashboardPage() {
-  const theme = useTheme();
   const { mode } = useDataMode();
   const [displayName, setDisplayName] = useState("Therapist");
   const [kpi, setKpi] = useState({
@@ -66,84 +53,30 @@ export default function DashboardPage() {
   return (
     <Box sx={{ maxWidth: 1500, mx: "auto" }}>
       {/* Page header */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        spacing={2}
-        mb={3}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Good morning, {displayName} 👋
-          </Typography>
-          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            Here&apos;s your clinic&apos;s live rehabilitation overview
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Chip
-            icon={<FiberManualRecord sx={{ fontSize: 12, color: "#10d97e !important" }} />}
-            label={
-              mode === "demo"
-                ? `${kpi.active_patients} demo patients`
-                : `${kpi.active_patients} ${kpi.active_patients === 1 ? "patient" : "patients"} live`
-            }
-            sx={{ background: "rgba(16,217,126,0.1)", border: "1px solid rgba(16,217,126,0.3)", color: "#10d97e", fontWeight: 700 }}
-          />
-          <Chip
-            label="Today"
-            variant="outlined"
-            sx={{ borderColor: "rgba(34,211,238,0.4)", color: "#22d3ee", fontWeight: 600 }}
-          />
-        </Stack>
-      </Stack>
+      <Box mb={3}>
+        <Typography variant="h4">Welcome back, {displayName}</Typography>
+        <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
+          {mode === "demo" ? "Demo account · sample data" : "Live monitoring and today's activity"}
+        </Typography>
+      </Box>
 
-      {/* Top metric cards */}
-      <Grid container spacing={2.5} mb={2.5}>
+      {/* Top metric cards (no trend deltas: the API does not provide period comparisons) */}
+      <Grid container spacing={2} mb={2.5}>
         <Grid item xs={12} sm={6} lg={3}>
-          <MetricCard
-            title={mode === "demo" ? "Demo Patients" : "Active Patients"}
-            value={String(kpi.active_patients)}
-            delta="+12%"
-            trend="up"
-            icon={<People sx={{ fontSize: 28 }} />}
-            color="#22d3ee"
-            subtitle="vs last week"
-          />
+          <MetricCard title="Patients" value={String(kpi.active_patients)} icon={<People fontSize="small" />}
+            subtitle={mode === "demo" ? "demo records" : "in your clinic"} />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <MetricCard
-            title={mode === "demo" ? "Demo Stations" : "Live Sessions"}
-            value={String(kpi.active_sessions)}
-            delta="+2"
-            trend="up"
-            icon={<MonitorHeart sx={{ fontSize: 28 }} />}
-            color="#10d97e"
-            subtitle={mode === "demo" ? "sample activity" : "now streaming"}
-          />
+          <MetricCard title="Sessions today" value={String(kpi.sessions_today)} icon={<MonitorHeart fontSize="small" />}
+            subtitle="uploaded or monitored" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <MetricCard
-            title="Alerts"
-            value={String(Math.round(kpi.alert_rate * 100))}
-            delta="-1"
-            trend="down"
-            icon={<Warning sx={{ fontSize: 28 }} />}
-            color="#f5b73b"
-            subtitle="needs attention"
-          />
+          <MetricCard title="Average quality" value={`${Math.round(kpi.avg_quality)}`} icon={<HealthAndSafety fontSize="small" />}
+            subtitle="movement quality score, 0-100" />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <MetricCard
-            title="Avg Adherence"
-            value={`${Math.round(kpi.avg_quality)}%`}
-            delta="+5%"
-            trend="up"
-            icon={<HealthAndSafety sx={{ fontSize: 28 }} />}
-            color="#3b82f6"
-            subtitle="this month"
-          />
+          <MetricCard title="Alert rate" value={`${Math.round(kpi.alert_rate * 100)}%`} icon={<Warning fontSize="small" />}
+            color="#B45309" subtitle="sessions with an alert" />
         </Grid>
       </Grid>
 

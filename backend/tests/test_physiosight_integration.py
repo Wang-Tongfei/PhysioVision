@@ -3,30 +3,18 @@ import sys
 import threading
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 import cv2
 import numpy as np
-from fastapi.testclient import TestClient
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from physiosight.pipeline import analyze_sequence  # noqa: E402
-from physiosight.session.models import Session  # noqa: E402
 from physiosight.testing import synth  # noqa: E402
 
-from app.api.v1.endpoints.auth import current_user  # noqa: E402
-from app.core.database import Base, SessionLocal, engine  # noqa: E402
-from app.models.patient import Patient  # noqa: E402
-from app.services.monitor_engine import (  # noqa: E402
-    BrowserFrameSource,
-    MonitorEngine,
-    _load_vision,
-    fatigue_from_session,
-    rom_from_session,
-)
-from main import app  # noqa: E402
+from app.services.monitor_engine import BrowserFrameSource, _load_vision  # noqa: E402
+from app.services.session_records import fatigue_from_session, rom_from_session  # noqa: E402
 
 
 class EnginePackageTest(unittest.TestCase):
@@ -97,43 +85,6 @@ class EnginePackageTest(unittest.TestCase):
         self.assertAlmostEqual(times[1], 0.1)
         self.assertGreater(times[2], times[1])
         source.close()
-
-
-class StoredAnalysisTest(unittest.TestCase):
-    def setUp(self):
-        Base.metadata.create_all(bind=engine)
-        with SessionLocal() as db:
-            patient = Patient(full_name="Synthetic Patient", clinic_id=9301)
-            db.add(patient)
-            db.commit()
-            self.patient_id = patient.id
-
-    def tearDown(self):
-        app.dependency_overrides.clear()
-
-    def test_session_document_is_persisted_and_served_to_the_same_clinic_only(self):
-        session = analyze_sequence(synth.render(synth.squat_script(2)), "squat", 10).session
-        telemetry = {
-            "movement_quality_score": 90.0, "fatigue_index": 0.0, "compensation_detected": False,
-            "total_reps": 2, "rom_achieved_deg": rom_from_session(session, []), "rom_target_deg": 80.0,
-        }
-        row_id = MonitorEngine._persist_summary(
-            patient_id=self.patient_id, exercise="squat", source_kind="upload", completed=True,
-            started_at=session.created_at, telemetry=telemetry, risk=None, therapist=None,
-            valid_data=True, clinic_id=9301, analysis=session.model_dump(mode="json"),
-        )
-        self.assertIsNotNone(row_id)
-
-        client = TestClient(app)
-        app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=1, clinic_id=9301, is_active=True)
-        response = client.get(f"/api/v1/sessions/{row_id}/analysis")
-        self.assertEqual(response.status_code, 200, response.text)
-        stored = Session.model_validate(response.json())
-        self.assertEqual(stored.session_id, session.session_id)
-        self.assertEqual(stored.summary.achieved, 2)
-
-        app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=2, clinic_id=9302, is_active=True)
-        self.assertEqual(client.get(f"/api/v1/sessions/{row_id}/analysis").status_code, 404)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-// Shared ECharts option builders (dark navy + teal theme).
+// Shared ECharts option builders (light theme, see app/theme.ts tokens).
 
-const AXIS = "rgba(141,181,204,0.8)";
-const SPLIT = "rgba(34,211,238,0.08)";
+const AXIS = "#64748B";
+const SPLIT = "#EEF2F6";
 
 export const baseGrid = { left: 44, right: 20, top: 30, bottom: 30 };
 
@@ -12,7 +12,7 @@ export function lineOption(
 ) {
   return {
     backgroundColor: "transparent",
-    tooltip: { trigger: "axis", backgroundColor: "#04101f", borderColor: "rgba(34,211,238,0.3)", textStyle: { color: "#e6f4ff" } },
+    tooltip: { trigger: "axis", backgroundColor: "#FFFFFF", borderColor: "#E2E8F0", textStyle: { color: "#0F172A" }, extraCssText: "box-shadow: 0 6px 16px rgba(15,23,42,0.08)" },
     legend: { textStyle: { color: AXIS }, top: 0, right: 0 },
     grid: baseGrid,
     xAxis: {
@@ -30,11 +30,11 @@ export function lineOption(
     series: series.map((s) => ({
       name: s.name,
       type: "line",
-      smooth: true,
+      smooth: false,
       symbol: "circle",
       symbolSize: 6,
       data: s.data,
-      lineStyle: { width: 3, color: s.color },
+      lineStyle: { width: 2, color: s.color },
       itemStyle: { color: s.color },
       areaStyle: opts.area
         ? {
@@ -42,7 +42,7 @@ export function lineOption(
               type: "linear",
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: s.color + "55" },
+                { offset: 0, color: s.color + "26" },
                 { offset: 1, color: s.color + "00" },
               ],
             },
@@ -52,10 +52,10 @@ export function lineOption(
   };
 }
 
-export function barOption(categories: string[], data: number[], color = "#22d3ee") {
+export function barOption(categories: string[], data: number[], color = "#0F766E") {
   return {
     backgroundColor: "transparent",
-    tooltip: { trigger: "axis", backgroundColor: "#04101f", borderColor: "rgba(34,211,238,0.3)", textStyle: { color: "#e6f4ff" } },
+    tooltip: { trigger: "axis", backgroundColor: "#FFFFFF", borderColor: "#E2E8F0", textStyle: { color: "#0F172A" }, extraCssText: "box-shadow: 0 6px 16px rgba(15,23,42,0.08)" },
     grid: { left: 44, right: 16, top: 20, bottom: 28 },
     xAxis: {
       type: "category",
@@ -93,7 +93,7 @@ export function donutOption(
 ) {
   return {
     backgroundColor: "transparent",
-    tooltip: { trigger: "item", backgroundColor: "#04101f", borderColor: "rgba(34,211,238,0.3)", textStyle: { color: "#e6f4ff" } },
+    tooltip: { trigger: "item", backgroundColor: "#FFFFFF", borderColor: "#E2E8F0", textStyle: { color: "#0F172A" }, extraCssText: "box-shadow: 0 6px 16px rgba(15,23,42,0.08)" },
     legend: { bottom: 0, textStyle: { color: AXIS } },
     series: [
       {

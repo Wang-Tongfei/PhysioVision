@@ -20,11 +20,11 @@ export default function MetricCard({
   delta,
   trend = "up",
   icon,
-  color = "#22d3ee",
+  color = "#0F766E",
   subtitle,
 }: MetricCardProps) {
   const up = trend === "up";
-  const deltaColor = up ? "#10d97e" : "#ef5b5b";
+  const deltaColor = up ? "#15803D" : "#B91C1C";
 
   return (
     <Box className="glass-card" sx={{ p: 2.5, height: "100%" }}>

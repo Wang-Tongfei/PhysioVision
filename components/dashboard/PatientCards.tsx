@@ -1,117 +1,79 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Box, Typography, Stack, Chip, LinearProgress, Avatar } from "@mui/material";
-import { Person, ChevronRight } from "@mui/icons-material";
+import { useRouter } from "next/navigation";
+import { Box, Chip, List, ListItemButton, Typography } from "@mui/material";
+import { ChevronRight, PeopleOutline } from "@mui/icons-material";
 import SectionCard from "@/components/common/SectionCard";
 import { patients } from "@/lib/mockData";
-import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useDataMode } from "@/lib/dataMode";
+import { StoredSession, exerciseLabel, formatDate } from "@/lib/sessions";
 
-const riskColor: Record<string, string> = {
-  Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
-};
+const riskColor: Record<string, string> = { Low: "#15803D", Moderate: "#B45309", High: "#B91C1C", Critical: "#B91C1C" };
+
+type Row = { id: number; name: string; diagnosis: string; risk: string; last: string };
+
+const capital = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
 
 export default function PatientCards() {
   const router = useRouter();
   const { mode } = useDataMode();
-  const [records, setRecords] = useState(patients);
+  const [rows, setRows] = useState<Row[]>([]);
+
   useEffect(() => {
     if (mode === "demo") {
-      setRecords(patients);
+      setRows(patients.map((p) => ({ id: p.id, name: p.name, diagnosis: p.diagnosis, risk: p.risk, last: `${p.last} · demo` })));
       return;
     }
-    api<Array<{ id: number; full_name: string; mrn: string; diagnosis?: string; risk_tier: string }>>("/patients")
-      .then((items) => setRecords(items.slice(0, 6).map((item) => ({
-        id: item.id,
-        name: item.full_name,
-        mrn: item.mrn,
-        age: 0,
-        diagnosis: item.diagnosis || "Assessment pending",
-        risk: `${item.risk_tier.charAt(0).toUpperCase()}${item.risk_tier.slice(1)}`,
-        score: 0,
-        adherence: 0,
-        last: "No sessions",
-        trend: [0, 0, 0, 0, 0, 0],
-      }))))
-      .catch(() => setRecords([]));
+    let cancelled = false;
+    api<Array<{ id: number; full_name: string; diagnosis?: string; risk_tier: string }>>("/patients")
+      .then(async (items) => {
+        const recent = await Promise.all(
+          items.slice(0, 6).map((p) => api<StoredSession[]>(`/patients/${p.id}/sessions?limit=1`).then((s) => s[0]).catch(() => undefined)),
+        );
+        if (cancelled) return;
+        setRows(items.slice(0, 6).map((p, i) => {
+          const s = recent[i];
+          return {
+            id: p.id,
+            name: p.full_name,
+            diagnosis: p.diagnosis || "Assessment pending",
+            risk: capital(p.risk_tier),
+            last: s ? `${exerciseLabel(s.exercise)} ${s.achieved ?? 0}/${s.attempts ?? 0} · ${formatDate(s.started_at, false)}` : "No sessions yet",
+          };
+        }));
+      })
+      .catch(() => setRows([]));
+    return () => { cancelled = true; };
   }, [mode]);
+
   return (
-    <SectionCard title="Active Patients" subtitle={`${records.length} ${mode === "demo" ? "demo" : "database"} records`} icon={<Person />}>
-      <Stack spacing={1.5}>
-        {records.map((p) => (
-          <Box
-            key={p.id}
-            onClick={() => router.push(`/patients?patient=${p.id}`)}
-            sx={{
-              borderRadius: "12px",
-              p: 1.5,
-              background: "rgba(11,30,51,0.5)",
-              border: "1px solid rgba(34,211,238,0.15)",
-              display: "flex",
-              alignItems: "center",
-              gap: 1.5,
-              cursor: "pointer",
-              transition: "border-color .2s ease, background .2s ease",
-              "&:hover": {
-                borderColor: "rgba(34,211,238,0.45)",
-                background: "rgba(11,30,51,0.75)",
-              },
-            }}
-          >
-            <Avatar
-              sx={{
-                bgcolor: "linear-gradient(135deg,#0891b2,#22d3ee)",
-                width: 42,
-                height: 42,
-                color: "#04101f",
-                fontWeight: 800,
-              }}
+    <SectionCard title="Patients" subtitle="Latest session per patient" icon={<PeopleOutline fontSize="small" />}>
+      {rows.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">No patients yet.</Typography>
+      ) : (
+        <List disablePadding>
+          {rows.map((p) => (
+            <ListItemButton
+              key={p.id}
+              onClick={() => router.push(mode === "live" ? `/patients/${p.id}` : "/patients")}
+              sx={{ px: 1, py: 1, alignItems: "flex-start" }}
             >
-              {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-            </Avatar>
-            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>{p.name}</Typography>
-                <Chip
-                  label={p.risk}
-                  size="small"
-                  sx={{ height: 18, fontSize: 11, fontWeight: 700, bgcolor: riskColor[p.risk] + "22", color: riskColor[p.risk], border: `1px solid ${riskColor[p.risk]}40` }}
-                />
-              </Stack>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                  display: "block",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {p.diagnosis}
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={p.score}
-                sx={{
-                  height: 5,
-                  borderRadius: 3,
-                  mt: 0.5,
-                  backgroundColor: "rgba(34,211,238,0.08)",
-                  "& .MuiLinearProgress-bar": { backgroundColor: "#22d3ee", borderRadius: 3 },
-                }}
-              />
-            </Box>
-            <Box sx={{ textAlign: "right", minWidth: 44 }}>
-              <Typography variant="body2" sx={{ fontWeight: 800, color: "#22d3ee" }}>{p.score}</Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>{p.last}</Typography>
-            </Box>
-            <ChevronRight sx={{ color: "text.secondary", fontSize: 20 }} />
-          </Box>
-        ))}
-      </Stack>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography noWrap sx={{ fontWeight: 600, fontSize: 14 }}>{p.name}</Typography>
+                  <Chip size="small" variant="outlined" label={p.risk}
+                    sx={{ color: riskColor[p.risk] || "text.secondary", borderColor: (riskColor[p.risk] || "#94A3B8") + "55" }} />
+                </Box>
+                <Typography noWrap variant="caption" component="div" color="text.secondary">{p.diagnosis}</Typography>
+                <Typography noWrap variant="caption" component="div" sx={{ color: "text.primary", mt: 0.25 }}>{p.last}</Typography>
+              </Box>
+              <ChevronRight fontSize="small" sx={{ color: "text.disabled", mt: 0.5 }} />
+            </ListItemButton>
+          ))}
+        </List>
+      )}
     </SectionCard>
   );
 }

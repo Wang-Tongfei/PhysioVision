@@ -27,6 +27,13 @@ async def lifespan(app: FastAPI):
         if "analysis" not in session_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE rehab_sessions ADD COLUMN analysis JSON"))
+        if "engine_session_id" not in session_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE rehab_sessions ADD COLUMN engine_session_id VARCHAR(36)"))
+                connection.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_rehab_sessions_engine_session_id "
+                    "ON rehab_sessions (engine_session_id)"
+                ))
         columns = {column["name"] for column in inspect(engine).get_columns("exercises")}
         if "clinic_id" not in columns:
             with engine.begin() as connection:

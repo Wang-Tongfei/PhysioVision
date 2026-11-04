@@ -4,135 +4,91 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Box,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
   Avatar,
-  IconButton,
-  Tooltip,
   Badge,
+  Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Drawer,
+  IconButton,
   InputAdornment,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   TextField,
-  useTheme,
-  alpha,
+  Tooltip,
+  Typography,
 } from "@mui/material";
 import {
-  Dashboard as DashboardIcon,
-  People as PeopleIcon,
-  FitnessCenter as FitnessCenterIcon,
-  Description as DescriptionIcon,
-  Settings as SettingsIcon,
-  Notifications as NotificationsIcon,
-  Search as SearchIcon,
+  DashboardOutlined,
+  DescriptionOutlined,
+  FitnessCenterOutlined,
+  Logout,
   Menu as MenuIcon,
-  MonitorHeart as MonitorHeartIcon,
-  Logout as LogoutIcon,
-  FiberManualRecord as LiveIcon,
+  MonitorHeart,
+  NotificationsOutlined,
+  PeopleOutline,
+  Search,
+  SettingsOutlined,
 } from "@mui/icons-material";
-import { usePersistentState } from "@/lib/usePersistentState";
 import { api, clearSession, getSession, SessionUser } from "@/lib/api";
 import { DataModeProvider, useDataMode } from "@/lib/dataMode";
-import { DEMO_PATIENTS_KEY } from "@/lib/mockData";
+import { tokens } from "@/app/theme";
 
 const navItems = [
-  { text: "Dashboard", icon: <DashboardIcon />, href: "/dashboard" },
-  { text: "Patients", icon: <PeopleIcon />, href: "/patients" },
-  { text: "Exercises", icon: <FitnessCenterIcon />, href: "/exercises" },
-  { text: "Reports", icon: <DescriptionIcon />, href: "/reports" },
-  { text: "Settings", icon: <SettingsIcon />, href: "/settings" },
+  { text: "Dashboard", icon: <DashboardOutlined fontSize="small" />, href: "/dashboard" },
+  { text: "Patients", icon: <PeopleOutline fontSize="small" />, href: "/patients" },
+  { text: "Exercises", icon: <FitnessCenterOutlined fontSize="small" />, href: "/exercises" },
+  { text: "Reports", icon: <DescriptionOutlined fontSize="small" />, href: "/reports" },
+  { text: "Settings", icon: <SettingsOutlined fontSize="small" />, href: "/settings" },
 ];
 
-const DRAWER_WIDTH = 250;
+const DRAWER_WIDTH = 232;
+
+type AlertItem = { id: number; severity: string; message: string; patient_id?: number | null; created_at?: string | null };
+
+const DEMO_ALERTS: AlertItem[] = [
+  { id: -1, severity: "critical", message: "Sample alert: compensation detected during squats.", patient_id: null },
+  { id: -2, severity: "warning", message: "Sample alert: repetitions slowed markedly within the set.", patient_id: null },
+];
+
+export function Brand({ compact = false }: { compact?: boolean }) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+      <Box
+        sx={{
+          width: 30, height: 30, borderRadius: 1.5, bgcolor: "primary.main",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <MonitorHeart sx={{ color: "#fff", fontSize: 18 }} />
+      </Box>
+      {!compact && (
+        <Typography sx={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>PhysioVision</Typography>
+      )}
+    </Box>
+  );
+}
+
+function initials(name: string) {
+  return name.split(" ").filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
 
 function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; onNavigate?: () => void; user: SessionUser | null }) {
   const pathname = usePathname();
-  const theme = useTheme();
   const { mode } = useDataMode();
-  const [patientCount, setPatientCount] = useState(mode === "demo" ? 6 : 0);
-
-  useEffect(() => {
-    if (mode === "demo") {
-      const loadDemoCount = () => {
-        try {
-          const saved = window.localStorage.getItem(DEMO_PATIENTS_KEY);
-          setPatientCount(saved ? JSON.parse(saved).length : 6);
-        } catch {
-          setPatientCount(6);
-        }
-      };
-      loadDemoCount();
-      const timer = window.setInterval(loadDemoCount, 2000);
-      return () => window.clearInterval(timer);
-    }
-    const load = () =>
-      api<{ active_patients: number }>("/analytics/clinic/kpi")
-        .then((result) => setPatientCount(result.active_patients ?? 0))
-        .catch(() => setPatientCount(0));
-    load();
-    const timer = window.setInterval(load, 2000);
-    return () => window.clearInterval(timer);
-  }, [mode]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", p: 2 }}>
-      {/* Logo */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3, px: 1 }}>
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: 2,
-            background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 4px 18px rgba(34,211,238,0.45)",
-          }}
-        >
-          <MonitorHeartIcon sx={{ color: "#04101f", fontSize: 24 }} />
-        </Box>
-        <Box>
-          <Typography sx={{ fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
-            Physio<span style={{ color: "#22d3ee" }}>Vision</span>
-          </Typography>
-          <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            AI Rehab Assistant
-          </Typography>
-        </Box>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", px: 1.5, py: 2 }}>
+      <Box sx={{ px: 1, mb: 3 }}>
+        <Brand />
       </Box>
 
-      {/* Live status */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          px: 1.5,
-          py: 1,
-          mb: 2,
-          borderRadius: 2,
-          background: "rgba(16,217,126,0.08)",
-          border: "1px solid rgba(16,217,126,0.25)",
-        }}
-      >
-        <LiveIcon sx={{ color: "#10d97e", fontSize: 12 }} className="pulse-dot" />
-        <Typography variant="caption" sx={{ color: "#10d97e", fontWeight: 700 }}>
-          {mode === "demo"
-            ? `${patientCount} DEMO ${patientCount === 1 ? "PATIENT" : "PATIENTS"}`
-            : `${patientCount} ${patientCount === 1 ? "PATIENT" : "PATIENTS"} LIVE`}
-        </Typography>
-      </Box>
-
-      {/* Nav */}
       <List sx={{ flexGrow: 1, p: 0 }}>
         {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -142,58 +98,38 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
               component={Link}
               href={item.href}
               onClick={onNavigate}
-              className={active ? "nav-link active" : "nav-link"}
-              sx={{ mb: 0.5, borderRadius: 2, p: 0, "&:hover": { background: "transparent" } }}
+              selected={active}
+              sx={{ mb: 0.25, py: 0.9, color: active ? "primary.dark" : "text.secondary" }}
             >
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1.5,
-                  px: 1.5,
-                  py: 1.2,
-                  width: "100%",
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 0, color: "inherit" }}>
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{ fontWeight: 600, fontSize: 14 }}
-                />
-              </Box>
+              <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.text} primaryTypographyProps={{ fontWeight: active ? 600 : 500, fontSize: 14 }} />
             </ListItemButton>
           );
         })}
       </List>
 
-      {/* User */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-          p: 1.5,
-          borderRadius: 2,
-          border: "1px solid rgba(34,211,238,0.18)",
-          background: "rgba(11,30,51,0.5)",
-        }}
-      >
-        <Avatar sx={{ width: 36, height: 36, background: "linear-gradient(135deg,#0891b2,#22d3ee)", fontSize: 14 }}>
-          {(user?.full_name || "Demo User").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+      {mode === "demo" && (
+        <Box sx={{ mx: 1, mb: 1.5, p: 1.25, borderRadius: 2, bgcolor: tokens.subtle }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>Demo mode</Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Sample data for the demo account. Register an account to use real data.
+          </Typography>
+        </Box>
+      )}
+
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1, py: 1, borderTop: `1px solid ${tokens.line}`, pt: 1.5 }}>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: tokens.subtle, color: "text.primary", fontSize: 13, fontWeight: 600 }}>
+          {initials(user?.full_name || "User")}
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>
-            {user?.full_name || "Demo User"}
-          </Typography>
-          <Typography variant="caption" sx={{ color: "text.secondary" }}>
-            {user?.role?.replaceAll("_", " ") || "Demo mode"}
+          <Typography noWrap sx={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3 }}>{user?.full_name || "Signed in"}</Typography>
+          <Typography noWrap variant="caption" sx={{ color: "text.secondary", textTransform: "capitalize" }}>
+            {user?.role?.replaceAll("_", " ") || ""}
           </Typography>
         </Box>
         <Tooltip title="Sign out">
           <IconButton size="small" onClick={onLogout} sx={{ color: "text.secondary" }}>
-            <LogoutIcon fontSize="small" />
+            <Logout fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
@@ -201,21 +137,16 @@ function SidebarContent({ onLogout, onNavigate, user }: { onLogout: () => void; 
   );
 }
 
-function DashboardShell({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const theme = useTheme();
+function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { mode } = useDataMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [notificationsRead, setNotificationsRead, notificationsReady] =
-    usePersistentState("physiovision.notificationsRead", false);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
   useEffect(() => {
     const session = getSession();
@@ -226,191 +157,123 @@ function DashboardShell({
     setUser(session.user);
   }, [router]);
 
+  useEffect(() => {
+    if (mode === "demo") {
+      setAlerts(DEMO_ALERTS);
+      return;
+    }
+    const load = () => api<AlertItem[]>("/alerts?unack=true").then(setAlerts).catch(() => setAlerts([]));
+    load();
+    const timer = window.setInterval(load, 30000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
+
   const handleLogout = () => {
     clearSession();
     router.push("/login?relogin=1");
   };
 
+  const section = navItems.find((n) => pathname === n.href || pathname.startsWith(n.href + "/"))?.text || "PhysioVision";
+  const drawerPaper = { width: DRAWER_WIDTH, boxSizing: "border-box" as const, bgcolor: "background.paper", borderRight: `1px solid ${tokens.line}` };
+
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      {/* Desktop sidebar */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          display: { xs: "none", md: "block" },
-          "& .MuiDrawer-paper": {
-            width: DRAWER_WIDTH,
-            boxSizing: "border-box",
-            background: "rgba(6, 20, 38, 0.85)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-            borderRight: "1px solid rgba(34,211,238,0.15)",
-            boxShadow: "4px 0 24px rgba(0,0,0,0.3)",
-          },
-        }}
-        open
-      >
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      <Drawer variant="permanent" open sx={{ width: DRAWER_WIDTH, flexShrink: 0, display: { xs: "none", md: "block" }, "& .MuiDrawer-paper": drawerPaper }}>
         <SidebarContent onLogout={handleLogout} user={user} />
       </Drawer>
-
-      {/* Mobile drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
         ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { xs: "block", md: "none" },
-          "& .MuiDrawer-paper": {
-            width: DRAWER_WIDTH,
-            background: "rgba(6, 20, 38, 0.95)",
-            backdropFilter: "blur(18px)",
-            borderRight: "1px solid rgba(34,211,238,0.15)",
-          },
-        }}
+        sx={{ display: { xs: "block", md: "none" }, "& .MuiDrawer-paper": drawerPaper }}
       >
         <SidebarContent onLogout={handleLogout} user={user} onNavigate={() => setMobileOpen(false)} />
       </Drawer>
 
-      {/* Main content */}
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        {/* Top bar */}
-        <Box
-          className="topbar"
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-            px: { xs: 2, md: 3 },
-            py: 1.5,
-          }}
-        >
-          <IconButton
-            onClick={() => setMobileOpen(true)}
-            sx={{ display: { md: "none" }, color: "text.primary" }}
-          >
+        <Box className="topbar" sx={{ display: "flex", alignItems: "center", gap: 1.5, px: { xs: 2, md: 4 }, height: 56 }}>
+          <IconButton onClick={() => setMobileOpen(true)} sx={{ display: { md: "none" } }} aria-label="Open navigation">
             <MenuIcon />
           </IconButton>
+          <Typography sx={{ fontWeight: 600, fontSize: 14, color: "text.secondary", flexGrow: 1 }}>{section}</Typography>
 
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: 16 }}>
-              {navItems.find((n) => pathname === n.href || pathname.startsWith(n.href + "/"))?.text || "PhysioVision"}
-            </Typography>
-          </Box>
-
-          <Box
+          <Button
             onClick={() => setSearchOpen(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => event.key === "Enter" && setSearchOpen(true)}
-            sx={{
-              display: { xs: "none", sm: "flex" },
-              alignItems: "center",
-              gap: 1,
-              px: 1.5,
-              py: 0.8,
-              borderRadius: 2,
-              background: "rgba(11,30,51,0.6)",
-              border: "1px solid rgba(34,211,238,0.18)",
-              minWidth: 220,
-              cursor: "pointer",
-            }}
+            variant="outlined"
+            startIcon={<Search fontSize="small" />}
+            sx={{ display: { xs: "none", sm: "inline-flex" }, color: "text.secondary", fontWeight: 500, minWidth: 220, justifyContent: "flex-start" }}
           >
-            <SearchIcon sx={{ color: "text.secondary", fontSize: 18 }} />
-            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Search patients, exercises…
-            </Typography>
-          </Box>
-
-          <Tooltip title="Notifications">
-            <IconButton
-              onClick={() => {
-                setNotificationsRead(true);
-                setNotificationsOpen(true);
-              }}
-              sx={{ color: "text.secondary" }}
-            >
-              <Badge
-                badgeContent={notificationsRead ? 0 : 3}
-                color="error"
-                invisible={!notificationsReady || notificationsRead}
-              >
-                <NotificationsIcon />
+            Search
+          </Button>
+          <Tooltip title="Alerts">
+            <IconButton onClick={() => setNotificationsOpen(true)} aria-label="Alerts">
+              <Badge badgeContent={alerts.length} color="error" invisible={alerts.length === 0}>
+                <NotificationsOutlined />
               </Badge>
             </IconButton>
           </Tooltip>
-
-          <IconButton
-            onClick={handleLogout}
-            sx={{
-              color: "text.secondary",
-              border: "1px solid rgba(34,211,238,0.2)",
-              "&:hover": { color: "#22d3ee", borderColor: "rgba(34,211,238,0.5)" },
-            }}
-          >
-            <LogoutIcon />
-          </IconButton>
         </Box>
 
-        {/* Page content */}
-        <Box
-          component="main"
-          className="bg-grid"
-          sx={{ flexGrow: 1, p: { xs: 2, md: 3 } }}
-        >
+        <Box component="main" sx={{ flexGrow: 1, px: { xs: 2, md: 4 }, py: { xs: 2, md: 3 }, maxWidth: 1440, width: "100%", mx: "auto" }}>
           {children}
         </Box>
       </Box>
 
       <Dialog open={searchOpen} onClose={() => setSearchOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Search PhysioVision</DialogTitle>
+        <DialogTitle>Go to</DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
             autoFocus
-            placeholder="Search patients, exercises or modules"
+            placeholder="Patients, exercises, reports…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-            sx={{ mt: 1, mb: 2 }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }}
+            sx={{ mt: 1, mb: 1 }}
           />
           <List>
             {[
-              { label: "Patients", detail: "Patient records and progress", href: "/patients" },
+              { label: "Patients", detail: "Records, sessions and progress", href: "/patients" },
               { label: "Exercises", detail: "Exercise library and prescriptions", href: "/exercises" },
-              { label: "Reports", detail: "SOAP notes and FHIR exports", href: "/reports" },
-              { label: "Settings", detail: "Clinic, notifications and AI agents", href: "/settings" },
+              { label: "Reports", detail: "SOAP notes", href: "/reports" },
+              { label: "Settings", detail: "Clinic profile and notifications", href: "/settings" },
             ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(search.toLowerCase())).map((item) => (
-              <ListItemButton key={item.href} onClick={() => { setSearchOpen(false); setSearch(""); router.push(item.href); }} sx={{ borderRadius: 2 }}>
+              <ListItemButton key={item.href} onClick={() => { setSearchOpen(false); setSearch(""); router.push(item.href); }}>
                 <ListItemText primary={item.label} secondary={item.detail} />
               </ListItemButton>
             ))}
           </List>
         </DialogContent>
-        <DialogActions><Button onClick={() => setSearchOpen(false)}>Close</Button></DialogActions>
       </Dialog>
 
       <Dialog open={notificationsOpen} onClose={() => setNotificationsOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Notifications</DialogTitle>
+        <DialogTitle>Open alerts</DialogTitle>
         <DialogContent>
-          <List>
-            {[
-              ["Critical · Goh Hock Seng", "Pelvic compensation detected 2 minutes ago."],
-              ["Warning · Chua Seow Ling", "Fatigue index exceeded 70%."],
-              ["Report ready", "Siti Rahman's SOAP report is ready to review."],
-            ].map(([title, detail]) => (
-              <ListItemButton key={title} onClick={() => { setNotificationsOpen(false); router.push("/reports"); }} sx={{ borderRadius: 2 }}>
-                <ListItemText primary={title} secondary={detail} />
-              </ListItemButton>
-            ))}
-          </List>
+          {alerts.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 2 }}>No open alerts.</Typography>
+          ) : (
+            <List>
+              {alerts.map((alert) => (
+                <ListItemButton
+                  key={alert.id}
+                  onClick={() => { setNotificationsOpen(false); if (alert.patient_id) router.push(`/patients/${alert.patient_id}`); }}
+                >
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Chip size="small" label={alert.severity} color={alert.severity === "critical" ? "error" : "warning"} variant="outlined" />
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>{alert.message}</Typography>
+                      </Box>
+                    }
+                    secondary={alert.created_at ? new Date(alert.created_at).toLocaleString() : undefined}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNotificationsOpen(false)}>Close</Button>
-          <Button variant="contained" onClick={() => { setNotificationsOpen(false); router.push("/reports"); }}>View reports</Button>
-        </DialogActions>
+        <DialogActions><Button onClick={() => setNotificationsOpen(false)}>Close</Button></DialogActions>
       </Dialog>
     </Box>
   );

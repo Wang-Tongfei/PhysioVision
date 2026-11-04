@@ -381,9 +381,9 @@ export default function LiveMonitor() {
               alignItems: "center",
               justifyContent: "center",
               background:
-                "linear-gradient(135deg, rgba(34,211,238,0.18), rgba(59,130,246,0.1))",
-              border: "1px solid rgba(34,211,238,0.3)",
-              color: "#22d3ee",
+                "linear-gradient(135deg, rgba(15,118,110,0.18), rgba(79,70,229,0.1))",
+              border: "1px solid rgba(15,118,110,0.3)",
+              color: "#0F766E",
             }}
           >
             <MonitorHeart sx={{ fontSize: 22 }} />
@@ -491,8 +491,8 @@ export default function LiveMonitor() {
           borderRadius: "16px",
           overflow: "hidden",
           background:
-            "radial-gradient(ellipse at 50% 30%, rgba(34,211,238,0.12) 0%, rgba(6,21,38,0.9) 70%), linear-gradient(160deg, #0a2540 0%, #04101f 100%)",
-          border: "1px solid rgba(34,211,238,0.2)",
+            "radial-gradient(ellipse at 50% 30%, rgba(15,118,110,0.12) 0%, rgba(15,23,42,0.9) 70%), linear-gradient(160deg, #0a2540 0%, #FFFFFF 100%)",
+          border: "1px solid rgba(15,118,110,0.2)",
           height: { xs: 280, md: 420 },
           display: "flex",
           alignItems: "center",
@@ -534,7 +534,7 @@ export default function LiveMonitor() {
           />
         ) : !browserCameraActive ? (
           <Box sx={{ width: "52%", height: "88%", opacity: 0.8 }}>
-            <SkeletonOverlay color="#22d3ee" />
+            <SkeletonOverlay color="#0F766E" />
           </Box>
         ) : null}
 
@@ -548,9 +548,9 @@ export default function LiveMonitor() {
               position: "absolute",
               left: 12,
               top: 12,
-              bgcolor: "rgba(4,16,31,0.82)",
+              bgcolor: "rgba(15,23,42,0.82)",
               color: "#fff",
-              "&:hover": { bgcolor: "rgba(4,16,31,0.96)" },
+              "&:hover": { bgcolor: "rgba(15,23,42,0.96)" },
             }}
           >
             Back to Monitor
@@ -565,7 +565,7 @@ export default function LiveMonitor() {
               position: "absolute",
               inset: 0,
               justifyContent: "center",
-              bgcolor: "rgba(4,16,31,0.72)",
+              bgcolor: "rgba(15,23,42,0.72)",
             }}
           >
             <CircularProgress size={34} />
@@ -597,7 +597,7 @@ export default function LiveMonitor() {
             position: "absolute",
             top: 12,
             right: 12,
-            bgcolor: "rgba(4,16,31,0.78)",
+            bgcolor: "rgba(15,23,42,0.78)",
             color: active ? "#f87171" : "text.secondary",
             border: "1px solid rgba(148,163,184,0.3)",
             fontWeight: 700,
@@ -615,13 +615,13 @@ export default function LiveMonitor() {
             px: 1.5,
             py: 1,
             borderRadius: 1.5,
-            bgcolor: "rgba(11,30,51,0.55)",
-            color: status.form_ok ? "#10d97e" : "#f87171",
+            bgcolor: "#F8FAFC",
+            color: status.form_ok ? "#15803D" : "#f87171",
             fontFamily: "monospace",
             fontSize: 12,
             border: `1px solid ${
               status.form_ok
-                ? "rgba(16,217,126,0.3)"
+                ? "rgba(21,128,61,0.3)"
                 : "rgba(248,113,113,0.4)"
             }`,
           }}
@@ -686,9 +686,9 @@ export default function LiveMonitor() {
               flex: 1,
               borderRadius: "12px",
               p: 1.5,
-              background: "rgba(11,30,51,0.55)",
-              border: "1px solid rgba(34,211,238,0.18)",
-              "&:hover": { borderColor: "rgba(34,211,238,0.45)" },
+              background: "#F8FAFC",
+              border: "1px solid rgba(15,118,110,0.18)",
+              "&:hover": { borderColor: "rgba(15,118,110,0.45)" },
               transition: "border-color .2s ease",
             }}
           >
@@ -718,7 +718,7 @@ export default function LiveMonitor() {
               borderRadius: "12px",
               p: 2,
               textAlign: "center",
-              background: "rgba(11,30,51,0.35)",
+              background: "#F8FAFC",
               border: "1px dashed rgba(148,163,184,0.25)",
             }}
           >

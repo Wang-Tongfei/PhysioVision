@@ -105,10 +105,10 @@ export default function RegisterPage() {
   };
 
   const benefits = [
-    "14-day free trial, no card required",
-    "Unlimited patients & sessions",
-    "AI SOAP notes & risk alerts",
-    "FHIR / HL7 EHR integration",
+    "Patients, session uploads and progress trends",
+    "Per-repetition results from the PhysioSight engine",
+    "SOAP note drafts & rule-based alerts",
+    "Research and demonstration tool, not a medical device",
   ];
 
   return (
@@ -123,41 +123,38 @@ export default function RegisterPage() {
           p: 4,
           position: "relative",
           background:
-            "radial-gradient(ellipse at 70% 30%, rgba(59,130,246,0.25), transparent 60%), linear-gradient(160deg, #06243e 0%, #04101f 100%)",
-          borderRight: "1px solid rgba(34,211,238,0.15)",
+            "#EAF3F2",
+          borderRight: "1px solid rgba(15,118,110,0.15)",
         }}
       >
-        <Box className="glow-blob" sx={{ width: 360, height: 360, background: "rgba(59,130,246,0.3)", bottom: -80, right: -60 }} />
+        <Box className="glow-blob" sx={{ width: 360, height: 360, background: "rgba(79,70,229,0.3)", bottom: -80, right: -60 }} />
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 1, textDecoration: "none", color: "inherit" }}>
           <Box
             sx={{
               width: 40,
               height: 40,
               borderRadius: 2,
-              background: "linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%)",
+              background: "#0F766E",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <MonitorHeart sx={{ color: "#04101f", fontSize: 24 }} />
+            <MonitorHeart sx={{ color: "#FFFFFF", fontSize: 24 }} />
           </Box>
           <Typography sx={{ fontWeight: 800, fontSize: 22 }}>
-            Physio<span style={{ color: "#22d3ee" }}>Vision</span>
+            Physio<span style={{ color: "#0F766E" }}>Vision</span>
           </Typography>
         </Link>
 
         <Box sx={{ position: "relative", zIndex: 1 }}>
           <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.15, mb: 2 }}>
-            Build a smarter
-            <Box component="span" className="text-gradient">
-              {" "}rehab clinic
-            </Box>
+            Create your clinic workspace
           </Typography>
           <Stack spacing={1.5} mt={2}>
             {benefits.map((b) => (
               <Box key={b} sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <CheckCircle sx={{ color: "#10d97e", fontSize: 22 }} />
+                <CheckCircle sx={{ color: "#15803D", fontSize: 22 }} />
                 <Typography sx={{ color: "text.secondary" }}>{b}</Typography>
               </Box>
             ))}
@@ -179,7 +176,7 @@ export default function RegisterPage() {
           </Typography>
           <Typography sx={{ color: "text.secondary", mb: 1.5 }}>
             Already registered?{" "}
-            <Link href="/login" style={{ color: "#22d3ee", textDecoration: "none", fontWeight: 600 }}>
+            <Link href="/login" style={{ color: "#0F766E", textDecoration: "none", fontWeight: 600 }}>
               Sign in
             </Link>
           </Typography>
@@ -281,11 +278,11 @@ export default function RegisterPage() {
             </TextField>
 
             <FormControlLabel
-              control={<Checkbox size="small" sx={{ color: "#22d3ee" }} checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />}
+              control={<Checkbox size="small" sx={{ color: "#0F766E" }} checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />}
               label={
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  I agree to the <Link href="/#terms" style={{ color: "#22d3ee" }}>Terms</Link> &{" "}
-                  <Link href="/#privacy" style={{ color: "#22d3ee" }}>Privacy Policy</Link>
+                  I agree to the <Link href="/#terms" style={{ color: "#0F766E" }}>Terms</Link> &{" "}
+                  <Link href="/#privacy" style={{ color: "#0F766E" }}>Privacy Policy</Link>
                 </Typography>
               }
             />
@@ -318,9 +315,9 @@ const iconSx = { color: "text.secondary", fontSize: 20 };
 const fieldSx = {
   mb: 0.5,
   "& .MuiOutlinedInput-root": {
-    "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
-    "&:hover fieldset": { borderColor: "rgba(34,211,238,0.5)" },
-    "&.Mui-focused fieldset": { borderColor: "#22d3ee" },
-    background: "rgba(11,30,51,0.5)",
+    "& fieldset": { borderColor: "rgba(15,118,110,0.25)" },
+    "&:hover fieldset": { borderColor: "rgba(15,118,110,0.5)" },
+    "&.Mui-focused fieldset": { borderColor: "#0F766E" },
+    background: "#F8FAFC",
   },
 };

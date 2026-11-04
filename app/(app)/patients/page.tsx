@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Box, CircularProgress, Grid, Stack, Typography, Chip, Avatar, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert } from "@mui/material";
-import { DeleteOutline, Search, PersonAdd, EmojiEvents, LocalHospital, People, RestartAlt } from "@mui/icons-material";
-import SectionCard from "@/components/common/SectionCard";
+import { Box, CircularProgress, Stack, Typography, Chip, Button, TextField, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Snackbar, Alert, Paper, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
+import { ChevronRight, DeleteOutline, Search, PersonAdd, RestartAlt } from "@mui/icons-material";
+import { useRouter } from "next/navigation";
 import EChart from "@/components/charts/EChart";
 import { lineOption } from "@/components/charts/chartOptions";
 import { DEMO_PATIENTS_KEY, patients } from "@/lib/mockData";
@@ -39,10 +39,11 @@ function fromApi(patient: ApiPatient): PatientRecord {
 }
 
 const riskColor: Record<string, string> = {
-  Low: "#10d97e", Moderate: "#f5b73b", High: "#ef5b5b",
+  Low: "#15803D", Moderate: "#B45309", High: "#B91C1C", Critical: "#B91C1C",
 };
 
 export default function PatientsPage() {
+  const router = useRouter();
   const [demoRecords, setDemoRecords] = usePersistentState(DEMO_PATIENTS_KEY, patients);
   const [liveRecords, setLiveRecords] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -135,128 +136,87 @@ export default function PatientsPage() {
     setMessage(`${selected.name} was deleted.`);
   };
 
+  const riskChip = (risk: string) => (
+    <Chip size="small" label={risk} variant="outlined"
+      sx={{ color: riskColor[risk] || "text.secondary", borderColor: (riskColor[risk] || "#94A3B8") + "55" }} />
+  );
+
+  const openPatient = (p: PatientRecord) => {
+    if (mode === "live") router.push(`/patients/${p.id}`);
+    else setSelected(p);
+  };
+
   return (
-    <Box sx={{ maxWidth: 1500, mx: "auto" }}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
+    <Box>
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", md: "flex-end" }} spacing={2} sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Patients
-          </Typography>
+          <Typography variant="h4">Patients</Typography>
           <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            {records.length} active patients under your care · {mode === "demo" ? "demo dataset" : "database records"}
+            {records.length} {records.length === 1 ? "patient" : "patients"} · {mode === "demo" ? "demo dataset" : "your clinic"}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <TextField
+            size="small"
+            placeholder="Search name, MRN or diagnosis"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            sx={{ minWidth: 280 }}
+            InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" sx={{ color: "text.secondary" }} /></InputAdornment>) }}
+          />
           {mode === "demo" && (
-            <Button
-              variant="outlined"
-              startIcon={<RestartAlt />}
-              onClick={() => {
-                setDemoRecords(patients);
-                setMessage("Demo patient data was reset.");
-              }}
-            >
+            <Button variant="outlined" startIcon={<RestartAlt />} onClick={() => { setDemoRecords(patients); setMessage("Demo patient data was reset."); }}>
               Reset demo data
             </Button>
           )}
-          <TextField
-            size="small"
-            placeholder="Search patient / MRN"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            sx={{
-              "& .MuiOutlinedInput-root": {
-                "& fieldset": { borderColor: "rgba(34,211,238,0.25)" },
-                "&:hover fieldset": { borderColor: "rgba(34,211,238,0.5)" },
-                "&.Mui-focused fieldset": { borderColor: "#22d3ee" },
-                background: "rgba(11,30,51,0.5)",
-              },
-            }}
-            InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" sx={{ color: "text.secondary" }} /></InputAdornment>) }}
-          />
-          <Button disabled={loading} variant="contained" startIcon={<PersonAdd />} onClick={() => setAddOpen(true)}>Add Patient</Button>
+          <Button disabled={loading} variant="contained" startIcon={<PersonAdd />} onClick={() => setAddOpen(true)}>Add patient</Button>
         </Stack>
       </Stack>
 
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={8}>
-          <Grid container spacing={2.5}>
-            {loading && records.length === 0 && (
-              <Grid item xs={12}><Box sx={{ py: 8, display: "grid", placeItems: "center" }}><CircularProgress /></Box></Grid>
+      <Paper sx={{ overflow: "hidden" }}>
+        {loading && records.length === 0 ? (
+          <Box sx={{ py: 8, display: "grid", placeItems: "center" }}><CircularProgress size={28} /></Box>
+        ) : visible.length === 0 ? (
+          <Box sx={{ py: 6, px: 3, textAlign: "center" }}>
+            <Typography sx={{ fontWeight: 600 }}>{query ? `No patients match “${query}”.` : "No patients yet"}</Typography>
+            {!query && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Add a patient, then upload the sessions their device records.
+              </Typography>
             )}
-            {visible.map((p) => (
-              <Grid item xs={12} md={6} key={p.id}>
-                <Box onClick={() => setSelected(p)} sx={{ cursor: "pointer" }}>
-                  <SectionCard
-                    title={p.name}
-                    subtitle={p.mrn}
-                    icon={<People sx={{ fontSize: 20 }} />}
-                    action={<Chip label={p.risk} size="small" sx={{ bgcolor: riskColor[p.risk] + "22", color: riskColor[p.risk], fontWeight: 700, border: `1px solid ${riskColor[p.risk]}40` }} />}
-                  >
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Avatar
-                      sx={{
-                        bgcolor: "linear-gradient(135deg,#0891b2,#22d3ee)",
-                        width: 48, height: 48, color: "#04101f", fontWeight: 800,
-                      }}
-                    >
-                      {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                    </Avatar>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="caption" sx={{ color: "text.secondary" }}>{p.diagnosis}</Typography>
-                      <Stack direction="row" spacing={3} sx={{ mt: 0.5 }}>
-                        <Box><Typography variant="h6" sx={{ fontWeight: 800, color: "#22d3ee" }}>{p.score}</Typography><Typography variant="caption" sx={{ color: "text.secondary" }}>Score</Typography></Box>
-                        <Box><Typography variant="h6" sx={{ fontWeight: 800 }}>{p.adherence}%</Typography><Typography variant="caption" sx={{ color: "text.secondary" }}>Adherence</Typography></Box>
-                        <Box><Typography variant="h6" sx={{ fontWeight: 800 }}>{p.age}</Typography><Typography variant="caption" sx={{ color: "text.secondary" }}>Age</Typography></Box>
-                      </Stack>
-                    </Box>
-                  </Stack>
-                  <Box sx={{ mt: 1.5 }}>
-                    <EChart height={120} option={lineOption(["W1","W2","W3","W4","W5","W6"], [{ name: "ROM", data: p.trend, color: riskColor[p.risk] }])} />
-                  </Box>
-                  </SectionCard>
-                </Box>
-              </Grid>
-            ))}
-            {visible.length === 0 && (
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  {query
-                    ? `No patients match “${query}”.`
-                    : mode === "live"
-                    ? "No real patient records yet. Add the first patient or switch to Demo."
-                    : "No demo patients."}
-                </Alert>
-              </Grid>
-            )}
-          </Grid>
-        </Grid>
-
-        <Grid item xs={12} lg={4}>
-          <Stack spacing={2.5}>
-            <SectionCard title="Reward Badges" subtitle="Gamification & engagement" icon={<EmojiEvents />}>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {["Consistency", "ROM Milestone", "Form Master", "10 Sessions", "Early Bird"].map((b) => (
-                  <Chip key={b} icon={<EmojiEvents />} label={b} sx={{ bgcolor: "rgba(34,211,238,0.12)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }} />
-                ))}
-              </Stack>
-            </SectionCard>
-            <SectionCard title="Avatar Mode" subtitle="Privacy-preserving patient view" icon={<LocalHospital />}>
-              <Box
-                sx={{
-                  height: 200,
-                  borderRadius: 2,
-                  background: "radial-gradient(ellipse at 50% 30%, rgba(34,211,238,0.12) 0%, rgba(6,21,38,0.9) 70%), linear-gradient(160deg, #0a2540 0%, #04101f 100%)",
-                  border: "1px solid rgba(34,211,238,0.2)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <Typography variant="body2" sx={{ color: "text.secondary" }}>3D Avatar reconstruction preview</Typography>
-              </Box>
-            </SectionCard>
-          </Stack>
-        </Grid>
-      </Grid>
+          </Box>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Patient</TableCell>
+                <TableCell>Diagnosis</TableCell>
+                <TableCell>Age</TableCell>
+                <TableCell>Risk tier</TableCell>
+                {mode === "demo" && <TableCell align="right">Score</TableCell>}
+                {mode === "demo" && <TableCell align="right">Adherence</TableCell>}
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visible.map((p) => (
+                <TableRow key={p.id} hover onClick={() => openPatient(p)} sx={{ cursor: "pointer", "& td": { py: 1.5 } }}>
+                  <TableCell>
+                    <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{p.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">{p.mrn}</Typography>
+                  </TableCell>
+                  <TableCell sx={{ color: "text.secondary" }}>{p.diagnosis}</TableCell>
+                  <TableCell>{p.age || "—"}</TableCell>
+                  <TableCell>{riskChip(p.risk)}</TableCell>
+                  {mode === "demo" && <TableCell align="right">{p.score}</TableCell>}
+                  {mode === "demo" && <TableCell align="right">{p.adherence}%</TableCell>}
+                  <TableCell align="right"><ChevronRight fontSize="small" sx={{ color: "text.disabled" }} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Paper>
 
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Add patient</DialogTitle>
@@ -266,7 +226,7 @@ export default function PatientsPage() {
             <TextField label="MRN" value={form.mrn} onChange={(e) => setForm({ ...form, mrn: e.target.value })} required />
             <TextField label="Age" type="number" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} inputProps={{ min: 0, max: 120 }} />
             <TextField label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
-            <TextField select label="Risk" value={form.risk} onChange={(e) => setForm({ ...form, risk: e.target.value })}>
+            <TextField select label="Risk tier" value={form.risk} onChange={(e) => setForm({ ...form, risk: e.target.value })}>
               {["Low", "Moderate", "High"].map((risk) => <MenuItem key={risk} value={risk}>{risk}</MenuItem>)}
             </TextField>
           </Stack>
@@ -282,23 +242,16 @@ export default function PatientsPage() {
         <DialogContent>
           {selected && (
             <Stack spacing={1.5}>
-              <Typography color="text.secondary">{selected.mrn} · {selected.age} years old</Typography>
-              <Typography>{selected.diagnosis}</Typography>
-              <Stack direction="row" spacing={1}>
-                <Chip label={`${selected.risk} risk`} sx={{ color: riskColor[selected.risk] }} />
-                <Chip label={`Score ${selected.score}`} />
-                <Chip label={`${selected.adherence}% adherence`} />
-              </Stack>
-              <EChart height={180} option={lineOption(["W1","W2","W3","W4","W5","W6"], [{ name: "ROM", data: selected.trend, color: riskColor[selected.risk] }])} />
+              <Typography color="text.secondary">{selected.mrn} · {selected.age} years · {selected.diagnosis}</Typography>
+              <Stack direction="row" spacing={1}>{riskChip(selected.risk)}<Chip size="small" label={`Score ${selected.score}`} /></Stack>
+              <EChart height={180} option={lineOption(["W1", "W2", "W3", "W4", "W5", "W6"], [{ name: "ROM (demo)", data: selected.trend, color: "#0F766E" }])} />
+              <Alert severity="info" variant="outlined">Demo record. Session history and reports are available for patients in your clinic’s database.</Alert>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button color="error" startIcon={<DeleteOutline />} onClick={deletePatient}>
-            Delete patient
-          </Button>
+          <Button color="error" startIcon={<DeleteOutline />} onClick={deletePatient}>Delete</Button>
           <Button onClick={() => setSelected(null)}>Close</Button>
-          <Button variant="contained" onClick={() => { setSelected(null); setMessage("Patient record opened for review."); }}>Review record</Button>
         </DialogActions>
       </Dialog>
 

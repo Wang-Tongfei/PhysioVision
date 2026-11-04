@@ -40,9 +40,9 @@ export default function SectionCard({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  background: "linear-gradient(135deg, rgba(34,211,238,0.18), rgba(59,130,246,0.1))",
-                  border: "1px solid rgba(34,211,238,0.3)",
-                  color: "#22d3ee",
+                  background: "linear-gradient(135deg, rgba(15,118,110,0.18), rgba(79,70,229,0.1))",
+                  border: "1px solid rgba(15,118,110,0.3)",
+                  color: "#0F766E",
                 }}
               >
                 {icon}
